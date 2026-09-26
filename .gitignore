@@ -1,0 +1,24 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+*/build/
+*/*/build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# User Exclusions
+.agents/
+.agents
+.agenst/
+.agenst
+GEMINI.md
+gemini.md
+gemin.md
+AGENTS.md
+agents.md
