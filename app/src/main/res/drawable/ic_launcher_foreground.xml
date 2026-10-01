@@ -2,17 +2,17 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
 
-    <!-- The white 'n' arch -->
+    <!-- The white architectural 'n' arch with precision right-leg inner curve -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M34,72 L34,53 C34,42 41,36 50,36 C59,36 66,42 66,53 L66,72 L55,72 L55,53 C55,48 53,44 50,44 C47,44 45,48 45,53 L45,72 Z" />
+        android:pathData="M 333.5,653 L 333.5,514 A 136.5,136.5 0 0,1 606.5,514 L 606.5,656 L 561,656 A 15.5,15.5 0 0,1 545.5,640.5 L 545.5,514 A 75.5,75.5 0 0,0 394.5,514 L 394.5,653 Z" />
 
-    <!-- Radiant Terracotta Dot -->
+    <!-- Radiant Terracotta Accent Dot -->
     <path
-        android:fillColor="#FFEF6844"
-        android:pathData="M69,38 A7.5,7.5 0 1,1 68.99,38 Z" />
+        android:fillColor="#FFF77551"
+        android:pathData="M 644.2,347 A 52,52 0 1,1 644.19,347 Z" />
 
 </vector>

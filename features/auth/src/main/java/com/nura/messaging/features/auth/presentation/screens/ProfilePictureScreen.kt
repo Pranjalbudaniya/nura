@@ -192,9 +192,12 @@ fun ProfilePictureScreen(
 
     val launchCameraDirectly = {
         try {
-            val cameraDir = File(context.cacheDir, "camera_photos").apply { mkdirs() }
+            val baseDir = context.externalCacheDir ?: context.cacheDir
+            val cameraDir = File(baseDir, "camera_photos").apply { mkdirs() }
             val photoFile = File(cameraDir, "camera_avatar_${System.currentTimeMillis()}.jpg")
-            photoFile.createNewFile()
+            if (!photoFile.exists()) {
+                photoFile.createNewFile()
+            }
             tempCameraFilePath = photoFile.absolutePath
             val uri = FileProvider.getUriForFile(
                 context,

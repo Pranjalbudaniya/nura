@@ -35,6 +35,8 @@ import com.nura.messaging.features.auth.presentation.screens.WelcomeScreen
 import com.nura.messaging.features.auth.presentation.state.AuthUiEvent
 import com.nura.messaging.features.auth.presentation.viewmodel.AuthViewModel
 import com.nura.messaging.features.home.presentation.HomeScreen
+import com.nura.messaging.features.profile.presentation.screens.AccountScreen
+import com.nura.messaging.features.settings.presentation.screens.SettingsScreen
 import com.nura.messaging.navigation.NavRoute
 import kotlinx.coroutines.flow.collectLatest
 
@@ -367,10 +369,10 @@ fun NuraNavHost(
                 selectedPresetIndex = uiState.selectedPresetIndex,
                 selectedPresetColor = uiState.selectedPresetColor,
                 onNavigateToAccount = {
-                    navController.navigate(NavRoute.Auth.ProfilePicture)
+                    navController.navigate(NavRoute.Account)
                 },
                 onNavigateToSettings = {
-                    // Placeholder for settings navigation
+                    navController.navigate(NavRoute.Settings)
                 },
                 onConversationClick = { item ->
                     navController.navigate(
@@ -437,6 +439,58 @@ fun NuraNavHost(
                 participantUsername = chatRoute.participantUsername,
                 participantAvatarUrl = chatRoute.participantAvatarUrl,
                 onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable<NavRoute.Account>(
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                )
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                )
+            }
+        ) {
+            AccountScreen(
+                currentUser = uiState.currentUser,
+                profilePictureUri = uiState.profilePictureUri,
+                selectedPresetIndex = uiState.selectedPresetIndex,
+                selectedPresetColor = uiState.selectedPresetColor,
+                onUpdateProfilePicture = { uri ->
+                    authViewModel.onProfilePictureSelected(uri)
+                },
+                onSaveProfile = { name, _ ->
+                    authViewModel.updateUserName(name)
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable<NavRoute.Settings>(
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(300)
+                )
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(300)
+                )
+            }
+        ) {
+            SettingsScreen(
+                onNavigateBack = {
                     navController.popBackStack()
                 }
             )

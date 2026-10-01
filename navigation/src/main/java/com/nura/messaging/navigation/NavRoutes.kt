@@ -32,6 +32,12 @@ sealed interface NavRoute {
     data object Home : NavRoute
 
     @Serializable
+    data object Account : NavRoute
+
+    @Serializable
+    data object Settings : NavRoute
+
+    @Serializable
     data class Chat(
         val conversationId: String,
         val participantId: String,

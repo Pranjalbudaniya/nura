@@ -34,52 +34,63 @@ fun NuraBrandIcon(
             val w = this.size.width
             val h = this.size.height
 
-            // Scale factor relative to 108dp base
-            val scaleX = w / 108f
-            val scaleY = h / 108f
+            val s = minOf(w, h) / 1024f
+            val ox = (w - 1024f * s) / 2f
+            val oy = (h - 1024f * s) / 2f
 
-            // 1. Draw the 'n' arch
+            // 1. Draw the architectural 'n' arch
             val path = Path().apply {
-                moveTo(34f * scaleX, 72f * scaleY)
-                lineTo(34f * scaleX, 53f * scaleY)
-                // Outer arch
-                cubicTo(
-                    34f * scaleX, 41.5f * scaleY,
-                    41.2f * scaleX, 35.5f * scaleY,
-                    50f * scaleX, 35.5f * scaleY
+                moveTo(ox + 333.5f * s, oy + 653f * s)
+                lineTo(ox + 333.5f * s, oy + 514f * s)
+                // Outer arc
+                arcTo(
+                    rect = androidx.compose.ui.geometry.Rect(
+                        left = ox + (470f - 136.5f) * s,
+                        top = oy + (514f - 136.5f) * s,
+                        right = ox + (470f + 136.5f) * s,
+                        bottom = oy + (514f + 136.5f) * s
+                    ),
+                    startAngleDegrees = 180f,
+                    sweepAngleDegrees = 180f,
+                    forceMoveTo = false
                 )
-                cubicTo(
-                    58.8f * scaleX, 35.5f * scaleY,
-                    66f * scaleX, 41.5f * scaleY,
-                    66f * scaleX, 53f * scaleY
+                lineTo(ox + 606.5f * s, oy + 656f * s)
+                lineTo(ox + 561f * s, oy + 656f * s)
+                // Inner bottom-right fillet
+                arcTo(
+                    rect = androidx.compose.ui.geometry.Rect(
+                        left = ox + (561f - 15.5f) * s,
+                        top = oy + (640.5f - 15.5f) * s,
+                        right = ox + (561f + 15.5f) * s,
+                        bottom = oy + (640.5f + 15.5f) * s
+                    ),
+                    startAngleDegrees = 90f,
+                    sweepAngleDegrees = 90f,
+                    forceMoveTo = false
                 )
-                lineTo(66f * scaleX, 72f * scaleY)
-                lineTo(55f * scaleX, 72f * scaleY)
-                lineTo(55f * scaleX, 53f * scaleY)
-                // Inner arch
-                cubicTo(
-                    55f * scaleX, 47.5f * scaleY,
-                    52.8f * scaleX, 44f * scaleY,
-                    50f * scaleX, 44f * scaleY
+                lineTo(ox + 545.5f * s, oy + 514f * s)
+                // Inner arc
+                arcTo(
+                    rect = androidx.compose.ui.geometry.Rect(
+                        left = ox + (470f - 75.5f) * s,
+                        top = oy + (514f - 75.5f) * s,
+                        right = ox + (470f + 75.5f) * s,
+                        bottom = oy + (514f + 75.5f) * s
+                    ),
+                    startAngleDegrees = 0f,
+                    sweepAngleDegrees = -180f,
+                    forceMoveTo = false
                 )
-                cubicTo(
-                    47.2f * scaleX, 44f * scaleY,
-                    45f * scaleX, 47.5f * scaleY,
-                    45f * scaleX, 53f * scaleY
-                )
-                lineTo(45f * scaleX, 72f * scaleY)
+                lineTo(ox + 394.5f * s, oy + 653f * s)
                 close()
             }
             drawPath(path = path, color = archColor)
 
-            // 2. Draw the radiant terracotta dot
-            val dotCenterX = 69f * scaleX
-            val dotCenterY = 38f * scaleY
-            val dotRadius = 7.5f * minOf(scaleX, scaleY)
+            // 2. Draw the radiant terracotta accent dot
             drawCircle(
                 color = dotColor,
-                radius = dotRadius,
-                center = Offset(dotCenterX, dotCenterY)
+                radius = 52f * s,
+                center = Offset(ox + 644.2f * s, oy + 399f * s)
             )
         }
     }

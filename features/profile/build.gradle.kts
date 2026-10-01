@@ -36,6 +36,8 @@ dependencies {
     implementation(project(":domain:usecases"))
     implementation(project(":core:common"))
     implementation(project(":core:media"))
+    implementation(project(":features:auth"))
+    implementation(libs.coil.compose)
 
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))

@@ -681,6 +681,12 @@ class AuthViewModel @Inject constructor(
         _uiState.update { it.copy(isNewUserRegistration = false) }
     }
 
+    fun updateUserName(name: String) {
+        val current = _uiState.value.currentUser ?: return
+        val updated = current.copy(name = name)
+        _uiState.update { it.copy(currentUser = updated) }
+    }
+
     fun setOtpMode(enabled: Boolean) {
         _uiState.update {
             it.copy(
