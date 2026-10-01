@@ -174,7 +174,12 @@ class SupabaseAuthDataSource @Inject constructor(
         }
     }
 
-    suspend fun updateProfile(userId: String, name: String, about: String): UserInfo? {
+    suspend fun updateProfile(
+        userId: String,
+        name: String,
+        about: String,
+        avatarUrl: String? = null
+    ): UserInfo? {
         val token = auth.currentAccessTokenOrNull()
 
         // 1. Update Supabase Auth user metadata
@@ -186,6 +191,9 @@ class SupabaseAuthDataSource @Inject constructor(
                         put("full_name", name)
                         put("display_name", name)
                         put("about", about)
+                        if (!avatarUrl.isNullOrBlank()) {
+                            put("avatar_url", avatarUrl)
+                        }
                     })
                 }.toString()
 
@@ -210,6 +218,9 @@ class SupabaseAuthDataSource @Inject constructor(
                 put("full_name", name)
                 put("display_name", name)
                 put("about", about)
+                if (!avatarUrl.isNullOrBlank()) {
+                    put("avatar_url", avatarUrl)
+                }
             }.toString()
 
             val request = Request.Builder()
@@ -227,5 +238,45 @@ class SupabaseAuthDataSource @Inject constructor(
         } catch (_: Exception) {}
 
         return auth.currentUserOrNull()
+    }
+
+    suspend fun fetchRemoteProfile(userId: String): com.nura.messaging.domain.entities.auth.RemoteUserProfile? = withContext(Dispatchers.IO) {
+        val token = auth.currentAccessTokenOrNull()
+        try {
+            val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/rest/v1/profiles?id=eq.$userId&select=id,username,display_name,about,avatar_url"
+            val request = Request.Builder()
+                .url(url)
+                .header("apikey", SupabaseConfig.DEFAULT_ANON_KEY)
+                .header("Authorization", "Bearer ${token ?: SupabaseConfig.DEFAULT_ANON_KEY}")
+                .get()
+                .build()
+
+            okHttpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string().orEmpty()
+                    if (body.isNotBlank() && body.trim() != "[]") {
+                        val array = kotlinx.serialization.json.Json.parseToJsonElement(body) as? kotlinx.serialization.json.JsonArray
+                        if (array != null && array.isNotEmpty()) {
+                            val obj = array[0] as? kotlinx.serialization.json.JsonObject
+                            if (obj != null) {
+                                val id = (obj["id"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: userId
+                                val username = (obj["username"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                                val displayName = (obj["display_name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: username
+                                val about = (obj["about"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "HI there i'm using nura"
+                                val avatarUrl = (obj["avatar_url"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                                return@withContext com.nura.messaging.domain.entities.auth.RemoteUserProfile(
+                                    id = id,
+                                    username = username,
+                                    displayName = displayName,
+                                    about = about,
+                                    avatarUrl = avatarUrl
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        null
     }
 }

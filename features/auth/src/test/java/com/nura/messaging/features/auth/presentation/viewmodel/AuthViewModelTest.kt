@@ -414,8 +414,11 @@ class AuthViewModelTest {
 
         override suspend fun handleDeepLink(uriString: String): Boolean = true
 
-        override suspend fun updateProfile(name: String, about: String): Result<AuthUser> =
+        override suspend fun updateProfile(name: String, about: String, avatarUrl: String?): Result<AuthUser> =
             Result.success(AuthUser("user_123", "user@nura.chat", name, about = about, isEmailVerified = true))
+
+        override suspend fun getRemoteUserProfile(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?> =
+            Result.success(com.nura.messaging.domain.entities.auth.RemoteUserProfile(userId, "test", "Test User", "about", null))
     }
 
     private class FakeContactsRepository : com.nura.messaging.domain.repositories.contacts.ContactsRepository {

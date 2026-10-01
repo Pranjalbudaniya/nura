@@ -149,5 +149,25 @@ class ChatUseCasesTest {
             conversationsList.add(newConv)
             return newConv
         }
+
+        override suspend fun getParticipantProfile(participantId: String): com.nura.messaging.domain.entities.auth.RemoteUserProfile? {
+            return com.nura.messaging.domain.entities.auth.RemoteUserProfile(
+                id = participantId,
+                username = "test",
+                displayName = "Test Participant",
+                about = "HI there i'm using nura",
+                avatarUrl = null
+            )
+        }
+
+        override suspend fun deleteConversation(conversationId: String): Result<Unit> {
+            conversationsList.removeAll { it.conversationId == conversationId }
+            messagesList.removeAll { it.conversationId == conversationId }
+            return Result.success(Unit)
+        }
+
+        override suspend fun acceptConversation(conversationId: String): Result<Unit> {
+            return Result.success(Unit)
+        }
     }
 }

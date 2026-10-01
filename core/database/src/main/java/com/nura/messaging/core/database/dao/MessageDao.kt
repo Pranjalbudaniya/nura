@@ -31,6 +31,9 @@ interface MessageDao {
     @Query("DELETE FROM messages WHERE messageId = :messageId")
     suspend fun deleteMessage(messageId: String)
 
+    @Query("DELETE FROM messages WHERE conversationId = :conversationId")
+    suspend fun deleteMessagesByConversation(conversationId: String)
+
     @Query("SELECT (SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId AND isOutgoing = 1) > 0 AND (SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId AND isOutgoing = 0) > 0")
     suspend fun hasBothExchangedFirstMessage(conversationId: String): Boolean
 }

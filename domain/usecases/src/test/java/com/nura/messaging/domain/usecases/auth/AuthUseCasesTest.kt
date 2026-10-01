@@ -185,7 +185,10 @@ class AuthUseCasesTest {
 
         override suspend fun handleDeepLink(uriString: String): Boolean = deepLinkResult
 
-        override suspend fun updateProfile(name: String, about: String): Result<AuthUser> =
+        override suspend fun updateProfile(name: String, about: String, avatarUrl: String?): Result<AuthUser> =
             Result.success(AuthUser("id_1", "test@nura.chat", name, about = about))
+
+        override suspend fun getRemoteUserProfile(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?> =
+            Result.success(com.nura.messaging.domain.entities.auth.RemoteUserProfile(userId, "test", "Test User", "about", null))
     }
 }

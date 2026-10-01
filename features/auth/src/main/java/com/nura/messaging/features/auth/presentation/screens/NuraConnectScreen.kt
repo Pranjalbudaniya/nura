@@ -89,12 +89,12 @@ fun NuraConnectScreen(
     var showQrScanner by remember { mutableStateOf(false) }
 
     val qrPayload = "nura://user/$rawHandle?key=$userKey"
-    val qrBitmap = remember(qrPayload, colors.brandLogoText) {
+    val qrBitmap = remember(qrPayload) {
         QrCodeGenerator.generateQrBitmap(
             content = qrPayload,
             sizePx = 512,
-            foregroundColorArgb = colors.brandLogoText.toArgb(),
-            backgroundColorArgb = Color.Transparent.toArgb()
+            foregroundColorArgb = android.graphics.Color.BLACK,
+            backgroundColorArgb = android.graphics.Color.WHITE
         )
     }
 
@@ -196,12 +196,12 @@ fun NuraConnectScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Architectural Framing for QR Code
+                            // Architectural Framing for QR Code (Solid White for QR standard compliance)
                             Box(
                                 modifier = Modifier
                                     .size(240.dp)
                                     .clip(RoundedCornerShape(22.dp))
-                                    .background(colorScheme.surfaceVariant)
+                                    .background(Color.White)
                                     .padding(18.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -223,14 +223,6 @@ fun NuraConnectScreen(
                                         anchorColor = colorScheme.outline.copy(alpha = 0.5f)
                                     )
                                 }
-
-                                // Stylized Minimalist Radiant Center Dot
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .background(colors.terracottaAccent, CircleShape)
-                                        .border(3.dp, colorScheme.surfaceVariant, CircleShape)
-                                )
                             }
 
                             Spacer(modifier = Modifier.height(18.dp))

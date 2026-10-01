@@ -43,6 +43,8 @@ sealed interface NavRoute {
         val participantId: String,
         val participantName: String,
         val participantUsername: String,
-        val participantAvatarUrl: String? = null
+        val participantAvatarUrl: String? = null,
+        val participantAbout: String? = null,
+        val isRequest: Boolean = false
     ) : NavRoute
 }

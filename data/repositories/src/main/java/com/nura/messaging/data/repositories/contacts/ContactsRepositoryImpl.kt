@@ -98,25 +98,30 @@ class ContactsRepositoryImpl @Inject constructor(
             else -> clean.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         }
 
-        // If remote user has avatar, download and save locally to app data
+        // If remote user has avatar, download or save locally to app data
         var localAvatarUri: String? = null
         if (!remoteAvatarUrl.isNullOrBlank()) {
-            try {
-                val avatarReq = Request.Builder().url(remoteAvatarUrl!!).get().build()
-                okHttpClient.newCall(avatarReq).execute().use { avResp ->
-                    if (avResp.isSuccessful) {
-                        val bytes = avResp.body?.bytes()
-                        if (bytes != null && bytes.isNotEmpty()) {
-                            localAvatarUri = localDataSource.saveConnectedUserAvatar(
-                                userId = currentUserId,
-                                connectedUserId = remoteId!!,
-                                imageBytes = bytes
-                            )
+            val raw = remoteAvatarUrl!!
+            if (raw.startsWith("data:") || raw.startsWith("preset:") || raw.startsWith("color:")) {
+                localAvatarUri = raw
+            } else if (raw.startsWith("http://") || raw.startsWith("https://")) {
+                try {
+                    val avatarReq = Request.Builder().url(raw).get().build()
+                    okHttpClient.newCall(avatarReq).execute().use { avResp ->
+                        if (avResp.isSuccessful) {
+                            val bytes = avResp.body?.bytes()
+                            if (bytes != null && bytes.isNotEmpty()) {
+                                localAvatarUri = localDataSource.saveConnectedUserAvatar(
+                                    userId = currentUserId,
+                                    connectedUserId = remoteId!!,
+                                    imageBytes = bytes
+                                )
+                            }
                         }
                     }
+                } catch (_: Exception) {
+                    // Fall back to null if download fails
                 }
-            } catch (_: Exception) {
-                // Fall back to null if download fails
             }
         }
 

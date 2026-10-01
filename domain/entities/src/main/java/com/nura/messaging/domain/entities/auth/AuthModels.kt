@@ -9,8 +9,18 @@ data class AuthUser(
     val name: String = "",
     val username: String = "",
     val about: String = "HI there i'm using nura",
+    val avatarUrl: String? = null,
     val isEmailVerified: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class RemoteUserProfile(
+    val id: String,
+    val username: String,
+    val displayName: String,
+    val about: String = "HI there i'm using nura",
+    val avatarUrl: String? = null
 )
 
 enum class UsernameAvailability {

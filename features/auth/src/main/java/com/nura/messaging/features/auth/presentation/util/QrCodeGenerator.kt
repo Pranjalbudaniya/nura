@@ -60,20 +60,78 @@ object QrCodeGenerator {
 
     fun decodeQrFromBitmap(bitmap: Bitmap): String? {
         return try {
+            // 1. Composite onto an opaque white Canvas to eliminate transparency/alpha issues
             val width = bitmap.width
             val height = bitmap.height
-            val pixels = IntArray(width * height)
-            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-            val source = RGBLuminanceSource(width, height, pixels)
-            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val opaqueBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(opaqueBitmap)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            canvas.drawBitmap(bitmap, 0f, 0f, null)
+
             val hints = mapOf(
                 DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
-                DecodeHintType.TRY_HARDER to true
+                DecodeHintType.TRY_HARDER to true,
+                DecodeHintType.CHARACTER_SET to "UTF-8"
             )
-            val result = MultiFormatReader().apply {
-                setHints(hints)
-            }.decode(binaryBitmap)
-            result.text
+            val reader = MultiFormatReader().apply { setHints(hints) }
+
+            // Helper to attempt decode on a given bitmap
+            fun tryDecode(bmp: Bitmap): String? {
+                val w = bmp.width
+                val h = bmp.height
+                val pixels = IntArray(w * h)
+                bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+                val source = RGBLuminanceSource(w, h, pixels)
+
+                // Try normal binarizer
+                try {
+                    val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+                    reader.reset()
+                    val res = reader.decodeWithState(binaryBitmap).text
+                    if (!res.isNullOrBlank()) return res
+                } catch (_: Exception) {}
+
+                // Try inverted binarizer (for dark mode / inverted QR codes)
+                try {
+                    val invertedSource = source.invert()
+                    val binaryBitmap = BinaryBitmap(HybridBinarizer(invertedSource))
+                    reader.reset()
+                    val res = reader.decodeWithState(binaryBitmap).text
+                    if (!res.isNullOrBlank()) return res
+                } catch (_: Exception) {}
+
+                return null
+            }
+
+            // Attempt 1: Direct decode
+            val directResult = tryDecode(opaqueBitmap)
+            if (!directResult.isNullOrBlank()) return directResult
+
+            // Attempt 2: Try rotations (90, 180, 270) in case gallery image was saved rotated
+            val matrix = android.graphics.Matrix()
+            for (angle in listOf(90f, 180f, 270f)) {
+                try {
+                    matrix.setRotate(angle)
+                    val rotated = Bitmap.createBitmap(opaqueBitmap, 0, 0, width, height, matrix, true)
+                    val rotResult = tryDecode(rotated)
+                    if (!rotResult.isNullOrBlank()) return rotResult
+                } catch (_: Exception) {}
+            }
+
+            // Attempt 3: If image is large (> 800px), downsample to 600px for faster, crisper edge detection
+            if (width > 800 || height > 800) {
+                val scale = 600f / maxOf(width, height)
+                val scaled = Bitmap.createScaledBitmap(
+                    opaqueBitmap,
+                    (width * scale).toInt().coerceAtLeast(100),
+                    (height * scale).toInt().coerceAtLeast(100),
+                    true
+                )
+                val scaledResult = tryDecode(scaled)
+                if (!scaledResult.isNullOrBlank()) return scaledResult
+            }
+
+            null
         } catch (e: Exception) {
             null
         }

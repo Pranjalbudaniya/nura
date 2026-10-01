@@ -118,10 +118,19 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun updateProfile(name: String, about: String): Result<AuthUser> = runCatching {
+    override suspend fun updateProfile(name: String, about: String, avatarUrl: String?): Result<AuthUser> = runCatching {
         val current = remoteDataSource.getCurrentUser() ?: throw IllegalStateException("Not authenticated")
-        val updated = remoteDataSource.updateProfile(current.id, name, about)
-        (updated ?: current).toDomain().copy(name = name, about = about)
+        val updated = remoteDataSource.updateProfile(current.id, name, about, avatarUrl)
+        val domain = (updated ?: current).toDomain()
+        domain.copy(
+            name = name,
+            about = about,
+            avatarUrl = avatarUrl ?: domain.avatarUrl
+        )
+    }.mapFailure()
+
+    override suspend fun getRemoteUserProfile(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?> = runCatching {
+        remoteDataSource.fetchRemoteProfile(userId)
     }.mapFailure()
 
     private fun UserInfo.toDomain(): AuthUser {
@@ -133,6 +142,7 @@ class AuthRepositoryImpl @Inject constructor(
             ?: ""
         val aboutText = userMetadata?.get("about")?.jsonPrimitive?.content
             ?: "HI there i'm using nura"
+        val avatar = userMetadata?.get("avatar_url")?.jsonPrimitive?.content
 
         return AuthUser(
             id = id,
@@ -140,6 +150,7 @@ class AuthRepositoryImpl @Inject constructor(
             name = fullName,
             username = username,
             about = aboutText,
+            avatarUrl = avatar,
             isEmailVerified = emailConfirmedAt != null,
             createdAt = System.currentTimeMillis()
         )

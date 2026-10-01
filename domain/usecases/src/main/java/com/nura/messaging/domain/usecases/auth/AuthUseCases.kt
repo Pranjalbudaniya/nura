@@ -113,10 +113,18 @@ class GetCurrentUserUseCase @Inject constructor(
 class UpdateProfileUseCase @Inject constructor(
     private val repository: AuthRepository
 ) {
-    suspend operator fun invoke(name: String, about: String): Result<AuthUser> {
+    suspend operator fun invoke(name: String, about: String, avatarUrl: String? = null): Result<AuthUser> {
         val trimmedName = name.trim()
         val trimmedAbout = about.trim().ifEmpty { "HI there i'm using nura" }
-        return repository.updateProfile(trimmedName, trimmedAbout)
+        return repository.updateProfile(trimmedName, trimmedAbout, avatarUrl)
+    }
+}
+
+class GetRemoteUserProfileUseCase @Inject constructor(
+    private val repository: AuthRepository
+) {
+    suspend operator fun invoke(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?> {
+        return repository.getRemoteUserProfile(userId)
     }
 }
 

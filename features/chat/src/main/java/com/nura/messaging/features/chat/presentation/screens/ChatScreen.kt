@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -48,10 +50,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.nura.messaging.core.common.ui.component.AvatarArchetypeCanvas
 import com.nura.messaging.core.common.ui.theme.NuraTheme
 import com.nura.messaging.core.common.ui.theme.PlusJakartaSansFamily
 import com.nura.messaging.domain.entities.chat.ChatMessage
@@ -68,6 +73,8 @@ fun ChatScreen(
     participantName: String,
     participantUsername: String,
     participantAvatarUrl: String? = null,
+    participantAbout: String? = null,
+    isRequest: Boolean = false,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ChatViewModel = androidx.hilt.navigation.compose.hiltViewModel()
@@ -78,7 +85,9 @@ fun ChatScreen(
             participantId = participantId,
             participantName = participantName,
             participantUsername = participantUsername,
-            participantAvatarUrl = participantAvatarUrl
+            participantAvatarUrl = participantAvatarUrl,
+            participantAbout = participantAbout,
+            isRequest = isRequest
         )
     }
 
@@ -116,7 +125,7 @@ private fun ChatScreenContent(
     // Auto-scroll to bottom on new message
     LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {
-            listState.animateScrollToItem(uiState.messages.size - 1)
+            listState.animateScrollToItem(uiState.messages.size)
         }
     }
 
@@ -143,7 +152,7 @@ private fun ChatScreenContent(
                 )
             }
 
-            // Avatar
+            // Top Bar Avatar
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -153,12 +162,25 @@ private fun ChatScreenContent(
                 contentAlignment = Alignment.Center
             ) {
                 if (uiState.isProfileShared && !uiState.participantAvatarUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = uiState.participantAvatarUrl,
-                        contentDescription = uiState.participantName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    val rawAvatar = uiState.participantAvatarUrl!!
+                    if (rawAvatar.startsWith("preset:")) {
+                        val idx = rawAvatar.removePrefix("preset:").toIntOrNull()
+                        if (idx != null) {
+                            AvatarArchetypeCanvas(
+                                presetIndex = idx,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(4.dp)
+                            )
+                        }
+                    } else {
+                        AsyncImage(
+                            model = rawAvatar,
+                            contentDescription = uiState.participantName,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 } else {
                     Text(
                         text = uiState.participantName.take(1).uppercase(Locale.getDefault()).ifEmpty { "?" },
@@ -178,14 +200,18 @@ private fun ChatScreenContent(
                     fontFamily = PlusJakartaSansFamily,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
-                    color = colors.brandLogoText
+                    color = colors.brandLogoText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = if (uiState.participantUsername.isNotBlank()) "@${uiState.participantUsername}" else "Encrypted relay",
                     fontFamily = PlusJakartaSansFamily,
                     fontWeight = FontWeight.Normal,
                     fontSize = 12.sp,
-                    color = colors.subtitleText
+                    color = colors.subtitleText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -215,72 +241,39 @@ private fun ChatScreenContent(
             }
         }
 
-        // Messages List or Empty State
+        // Messages List & Square Profile Header Card
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            if (uiState.messages.isEmpty() && !uiState.isLoading) {
-                // Empty state
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(colors.badgeBackground)
-                            .border(1.dp, colors.badgeBorder, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Lock,
-                            contentDescription = null,
-                            tint = colors.terracottaAccent,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "End-to-End Encrypted Relay",
-                        fontFamily = PlusJakartaSansFamily,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp,
-                        color = colors.brandLogoText
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Messages are temporarily relayed through Supabase and stored permanently only on your devices. Once delivered, the server copy is deleted.",
-                        fontFamily = PlusJakartaSansFamily,
-                        fontWeight = FontWeight.Normal,
-                        fontSize = 13.sp,
-                        color = colors.subtitleText,
-                        lineHeight = 18.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    horizontal = 16.dp,
+                    vertical = if (uiState.messages.isEmpty()) 32.dp else 16.dp
+                ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Square profile card: prominent when empty and moves up as users chat
+                item(key = "header_square_profile_card") {
+                    SquareProfileHeaderCard(
+                        name = uiState.participantName,
+                        username = uiState.participantUsername,
+                        about = uiState.participantAbout,
+                        avatarUrl = uiState.participantAvatarUrl,
+                        isProfileShared = uiState.isProfileShared,
+                        modifier = Modifier.padding(bottom = if (uiState.messages.isEmpty()) 0.dp else 16.dp)
                     )
                 }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(uiState.messages, key = { it.id }) { message ->
-                        MessageBubble(
-                            message = message,
-                            onRetry = { viewModel.retryMessage(message.id) }
-                        )
-                    }
+
+                items(uiState.messages, key = { it.id }) { message ->
+                    MessageBubble(
+                        message = message,
+                        onRetry = { viewModel.retryMessage(message.id) }
+                    )
                 }
             }
 
@@ -292,7 +285,16 @@ private fun ChatScreenContent(
             }
         }
 
-        // Bottom Input Bar
+        // Message Request Accept/Reject Banner
+        if (uiState.isRequest && !uiState.isAccepted) {
+            MessageRequestBanner(
+                participantName = uiState.participantName,
+                onAccept = viewModel::acceptRequest,
+                onReject = { viewModel.rejectRequest(onRejected = onBack) }
+            )
+        }
+
+        // Bottom Input Bar (with stabilized height to prevent shrinking on typing first letter)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -302,29 +304,41 @@ private fun ChatScreenContent(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = 48.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(colors.inputBackground)
                     .border(1.dp, colors.inputBorder, RoundedCornerShape(24.dp))
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                contentAlignment = Alignment.CenterStart
             ) {
-                if (uiState.inputText.isEmpty()) {
-                    Text(
-                        text = "Message...",
-                        fontFamily = PlusJakartaSansFamily,
-                        fontSize = 15.sp,
-                        color = colors.subtitleText
-                    )
-                }
                 BasicTextField(
                     value = uiState.inputText,
                     onValueChange = viewModel::onInputTextChanged,
                     textStyle = androidx.compose.ui.text.TextStyle(
                         fontFamily = PlusJakartaSansFamily,
                         fontSize = 15.sp,
-                        color = colors.brandLogoText
+                        color = colors.brandLogoText,
+                        lineHeight = 20.sp
                     ),
                     cursorBrush = SolidColor(colors.terracottaAccent),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { innerTextField ->
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (uiState.inputText.isEmpty()) {
+                                Text(
+                                    text = "Message...",
+                                    fontFamily = PlusJakartaSansFamily,
+                                    fontSize = 15.sp,
+                                    color = colors.subtitleText,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
                 )
             }
 
@@ -349,6 +363,202 @@ private fun ChatScreenContent(
                     contentDescription = "Send",
                     tint = if (uiState.inputText.isNotBlank()) Color.White else colors.subtitleText,
                     modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SquareProfileHeaderCard(
+    name: String,
+    username: String,
+    about: String,
+    avatarUrl: String?,
+    isProfileShared: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colors = NuraTheme.colors
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth(0.85f)
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(24.dp))
+            .background(colors.cardDarkBubble)
+            .border(1.dp, colors.badgeBorder, RoundedCornerShape(24.dp))
+            .padding(20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Profile Picture
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(colors.badgeBackground)
+                    .border(2.dp, colors.badgeBorder, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isProfileShared && !avatarUrl.isNullOrBlank()) {
+                    if (avatarUrl.startsWith("preset:")) {
+                        val idx = avatarUrl.removePrefix("preset:").toIntOrNull()
+                        if (idx != null) {
+                            AvatarArchetypeCanvas(
+                                presetIndex = idx,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp)
+                            )
+                        }
+                    } else {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                } else {
+                    Text(
+                        text = name.take(1).uppercase(Locale.getDefault()).ifEmpty { "?" },
+                        fontFamily = PlusJakartaSansFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 32.sp,
+                        color = colors.terracottaAccent
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Display Name
+            Text(
+                text = name.ifEmpty { "Nura User" },
+                fontFamily = PlusJakartaSansFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = colors.brandLogoText,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Username
+            if (username.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "@$username",
+                    fontFamily = PlusJakartaSansFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = colors.subtitleText
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // About / Bio
+            Text(
+                text = about.ifBlank { "HI there i'm using nura" },
+                fontFamily = PlusJakartaSansFamily,
+                fontWeight = FontWeight.Normal,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = colors.subtitleText,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageRequestBanner(
+    participantName: String,
+    onAccept: () -> Unit,
+    onReject: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = NuraTheme.colors
+    val colorScheme = MaterialTheme.colorScheme
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.badgeBackground)
+            .border(1.dp, colors.badgeBorder, RoundedCornerShape(20.dp))
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Message Request",
+            fontFamily = PlusJakartaSansFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            color = colors.brandLogoText
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = "${participantName.ifEmpty { "This sender" }} wants to message you. Accept to share profile and reply, or reject to remove this chat.",
+            fontFamily = PlusJakartaSansFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            color = colors.subtitleText,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Reject Button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colorScheme.surfaceContainerHighest.copy(alpha = 0.5f))
+                    .border(1.dp, colors.badgeBorder, RoundedCornerShape(12.dp))
+                    .clickable(onClick = onReject),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Reject",
+                    fontFamily = PlusJakartaSansFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            // Accept Button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.terracottaAccent)
+                    .clickable(onClick = onAccept),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Accept",
+                    fontFamily = PlusJakartaSansFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = Color.White
                 )
             }
         }
@@ -384,7 +594,7 @@ private fun MessageBubble(
                 )
                 .border(
                     width = 1.dp,
-                    color = if (message.isOutgoing) colors.badgeBorder else colors.badgeBorder,
+                    color = colors.badgeBorder,
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
                         topEnd = 16.dp,

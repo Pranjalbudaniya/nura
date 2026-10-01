@@ -73,3 +73,27 @@ class RetrySendMessageUseCase @Inject constructor(
         return repository.retrySendMessage(messageId)
     }
 }
+
+class DeleteConversationUseCase @Inject constructor(
+    private val repository: ChatRepository
+) {
+    suspend operator fun invoke(conversationId: String): Result<Unit> {
+        return repository.deleteConversation(conversationId)
+    }
+}
+
+class AcceptConversationUseCase @Inject constructor(
+    private val repository: ChatRepository
+) {
+    suspend operator fun invoke(conversationId: String): Result<Unit> {
+        return repository.acceptConversation(conversationId)
+    }
+}
+
+class GetParticipantProfileUseCase @Inject constructor(
+    private val repository: ChatRepository
+) {
+    suspend operator fun invoke(participantId: String): com.nura.messaging.domain.entities.auth.RemoteUserProfile? {
+        return repository.getParticipantProfile(participantId)
+    }
+}

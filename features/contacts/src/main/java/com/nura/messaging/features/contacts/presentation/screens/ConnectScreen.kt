@@ -863,12 +863,12 @@ private fun YourQrSheetContent(
     } else {
         "nura://user/$cleanHandle?key=$userKey"
     }
-    val qrBitmap = remember(qrPayload, colors.brandLogoText) {
+    val qrBitmap = remember(qrPayload) {
         QrCodeGenerator.generateQrBitmap(
             content = qrPayload,
             sizePx = 512,
-            foregroundColorArgb = colors.brandLogoText.toArgb(),
-            backgroundColorArgb = Color.Transparent.toArgb()
+            foregroundColorArgb = android.graphics.Color.BLACK,
+            backgroundColorArgb = android.graphics.Color.WHITE
         )
     }
 
@@ -898,12 +898,12 @@ private fun YourQrSheetContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // QR Code Box
+        // QR Code Box (Solid White for QR standards compliance)
         Box(
             modifier = Modifier
                 .size(220.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(colorScheme.surfaceVariant)
+                .background(Color.White)
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {

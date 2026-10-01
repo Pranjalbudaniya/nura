@@ -612,11 +612,20 @@ class AuthViewModel @Inject constructor(
         if (user != null && user.id.isNotBlank() && !uriString.isNullOrBlank()) {
             viewModelScope.launch(dispatchers.io) {
                 val savedPath = saveUserProfilePictureUseCase(user.id, uriString)
+                val targetUri = savedPath ?: uriString
                 _uiState.update {
                     it.copy(
-                        profilePictureUri = savedPath ?: uriString,
+                        profilePictureUri = targetUri,
                         selectedPresetIndex = null,
                         selectedPresetColor = null
+                    )
+                }
+                val base64 = compressImageToBase64(targetUri)
+                if (!base64.isNullOrBlank()) {
+                    updateProfileUseCase(
+                        name = user.name.ifBlank { user.username },
+                        about = user.about.ifBlank { "HI there i'm using nura" },
+                        avatarUrl = base64
                     )
                 }
             }
@@ -636,6 +645,11 @@ class AuthViewModel @Inject constructor(
         if (user != null && user.id.isNotBlank()) {
             viewModelScope.launch(dispatchers.io) {
                 saveUserPresetAvatarUseCase(user.id, index)
+                updateProfileUseCase(
+                    name = user.name.ifBlank { user.username },
+                    about = user.about.ifBlank { "HI there i'm using nura" },
+                    avatarUrl = "preset:$index"
+                )
             }
         }
         _uiState.update {
@@ -652,6 +666,11 @@ class AuthViewModel @Inject constructor(
         if (user != null && user.id.isNotBlank()) {
             viewModelScope.launch(dispatchers.io) {
                 saveUserPresetColorUseCase(user.id, colorArgb)
+                updateProfileUseCase(
+                    name = user.name.ifBlank { user.username },
+                    about = user.about.ifBlank { "HI there i'm using nura" },
+                    avatarUrl = "color:$colorArgb"
+                )
             }
         }
         _uiState.update {
@@ -671,13 +690,26 @@ class AuthViewModel @Inject constructor(
             val presetIdx = _uiState.value.selectedPresetIndex
             val presetColor = _uiState.value.selectedPresetColor
             viewModelScope.launch(dispatchers.io) {
-                if (!pic.isNullOrBlank()) {
-                    saveUserProfilePictureUseCase(user.id, pic)
-                } else if (presetIdx != null) {
-                    saveUserPresetAvatarUseCase(user.id, presetIdx)
-                } else if (presetColor != null) {
-                    saveUserPresetColorUseCase(user.id, presetColor)
+                val avatarUrl = when {
+                    !pic.isNullOrBlank() -> {
+                        saveUserProfilePictureUseCase(user.id, pic)
+                        compressImageToBase64(pic)
+                    }
+                    presetIdx != null -> {
+                        saveUserPresetAvatarUseCase(user.id, presetIdx)
+                        "preset:$presetIdx"
+                    }
+                    presetColor != null -> {
+                        saveUserPresetColorUseCase(user.id, presetColor)
+                        "color:$presetColor"
+                    }
+                    else -> null
                 }
+                updateProfileUseCase(
+                    name = user.name.ifBlank { user.username },
+                    about = user.about.ifBlank { "HI there i'm using nura" },
+                    avatarUrl = avatarUrl
+                )
             }
         }
         _uiState.update { it.copy(isNewUserRegistration = false) }
@@ -688,7 +720,41 @@ class AuthViewModel @Inject constructor(
         val updated = current.copy(name = name, about = about)
         _uiState.update { it.copy(currentUser = updated) }
         viewModelScope.launch(dispatchers.io) {
-            updateProfileUseCase(name, about)
+            val pic = _uiState.value.profilePictureUri
+            val presetIdx = _uiState.value.selectedPresetIndex
+            val presetColor = _uiState.value.selectedPresetColor
+            val avatarUrl = when {
+                !pic.isNullOrBlank() -> compressImageToBase64(pic)
+                presetIdx != null -> "preset:$presetIdx"
+                presetColor != null -> "color:$presetColor"
+                else -> null
+            }
+            updateProfileUseCase(name, about, avatarUrl)
+        }
+    }
+
+    private fun compressImageToBase64(uriString: String): String? {
+        return try {
+            if (uriString.startsWith("data:") || uriString.startsWith("http")) return uriString
+            val path = if (uriString.startsWith("file://")) uriString.removePrefix("file://") else uriString
+            val file = java.io.File(path)
+            val bitmap = if (file.exists()) {
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            } else {
+                null
+            }
+            if (bitmap != null) {
+                // Downscale to 160x160 to keep payload compact (<8KB) for Supabase
+                val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, 160, 160, true)
+                val outputStream = java.io.ByteArrayOutputStream()
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, outputStream)
+                val bytes = outputStream.toByteArray()
+                "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 

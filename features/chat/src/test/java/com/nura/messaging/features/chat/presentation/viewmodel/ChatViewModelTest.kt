@@ -5,6 +5,9 @@ import com.nura.messaging.domain.entities.chat.ChatConversation
 import com.nura.messaging.domain.entities.chat.ChatMessage
 import com.nura.messaging.domain.entities.chat.MessageStatus
 import com.nura.messaging.domain.repositories.chat.ChatRepository
+import com.nura.messaging.domain.usecases.chat.AcceptConversationUseCase
+import com.nura.messaging.domain.usecases.chat.DeleteConversationUseCase
+import com.nura.messaging.domain.usecases.chat.GetParticipantProfileUseCase
 import com.nura.messaging.domain.usecases.chat.GetConversationsUseCase
 import com.nura.messaging.domain.usecases.chat.GetMessagesUseCase
 import com.nura.messaging.domain.usecases.chat.GetOrCreateConversationUseCase
@@ -53,6 +56,9 @@ class ChatViewModelTest {
             syncPendingMessagesUseCase = SyncPendingMessagesUseCase(fakeRepository),
             observeIncomingMessagesUseCase = ObserveIncomingMessagesUseCase(fakeRepository),
             retrySendMessageUseCase = RetrySendMessageUseCase(fakeRepository),
+            deleteConversationUseCase = DeleteConversationUseCase(fakeRepository),
+            acceptConversationUseCase = AcceptConversationUseCase(fakeRepository),
+            getParticipantProfileUseCase = GetParticipantProfileUseCase(fakeRepository),
             dispatchers = testDispatcherProvider
         )
     }
@@ -151,6 +157,25 @@ class ChatViewModelTest {
                 participantName = name,
                 participantUsername = username
             )
+        }
+
+        override suspend fun getParticipantProfile(participantId: String): com.nura.messaging.domain.entities.auth.RemoteUserProfile? {
+            return com.nura.messaging.domain.entities.auth.RemoteUserProfile(
+                id = participantId,
+                username = "mayal",
+                displayName = "Maya Lin",
+                about = "Designer & Maker",
+                avatarUrl = null
+            )
+        }
+
+        override suspend fun deleteConversation(conversationId: String): Result<Unit> {
+            messages.clear()
+            return Result.success(Unit)
+        }
+
+        override suspend fun acceptConversation(conversationId: String): Result<Unit> {
+            return Result.success(Unit)
         }
     }
 }

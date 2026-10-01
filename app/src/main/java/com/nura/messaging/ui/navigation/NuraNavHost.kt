@@ -361,13 +361,16 @@ fun NuraNavHost(
                     navController.navigate(NavRoute.Settings)
                 },
                 onConversationClick = { item ->
+                    val isReq = !item.isProfileShared && !item.isOutgoing
                     navController.navigate(
                         NavRoute.Chat(
                             conversationId = item.id,
                             participantId = item.participantId,
                             participantName = item.name,
                             participantUsername = item.participantUsername,
-                            participantAvatarUrl = item.avatarUrl
+                            participantAvatarUrl = item.avatarUrl,
+                            participantAbout = null,
+                            isRequest = isReq
                         )
                     )
                 },
@@ -394,7 +397,9 @@ fun NuraNavHost(
                                     participantId = user.id,
                                     participantName = user.displayName.ifEmpty { user.username },
                                     participantUsername = user.username,
-                                    participantAvatarUrl = user.avatarUri
+                                    participantAvatarUrl = user.avatarUri,
+                                    participantAbout = null,
+                                    isRequest = false
                                 )
                             )
                         }
@@ -424,6 +429,8 @@ fun NuraNavHost(
                 participantName = chatRoute.participantName,
                 participantUsername = chatRoute.participantUsername,
                 participantAvatarUrl = chatRoute.participantAvatarUrl,
+                participantAbout = chatRoute.participantAbout,
+                isRequest = chatRoute.isRequest,
                 onBack = {
                     navController.popBackStack()
                 }

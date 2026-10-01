@@ -511,35 +511,20 @@ fun QrScannerScreen(
 }
 
 /**
- * Fast YUV frame analyzer using ZXing PlanarYUVLuminanceSource
+ * Robust frame analyzer using CameraX bitmap extraction and rotation-aware QR decoding
  */
-@OptIn(ExperimentalGetImage::class)
 private fun analyzeImageProxy(imageProxy: ImageProxy): String? {
-    val mediaImage = imageProxy.image ?: return null
     return try {
-        val planes = mediaImage.planes
-        val yBuffer = planes[0].buffer
-        val ySize = yBuffer.remaining()
-        val yBytes = ByteArray(ySize)
-        yBuffer.get(yBytes)
-
-        val width = imageProxy.width
-        val height = imageProxy.height
-        val rowStride = planes[0].rowStride
-
-        val source = PlanarYUVLuminanceSource(
-            yBytes,
-            rowStride,
-            height,
-            0,
-            0,
-            width,
-            height,
-            false
-        )
-        val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
-        MultiFormatReader().decode(binaryBitmap).text
-    } catch (e: Exception) {
+        val bitmap = imageProxy.toBitmap()
+        val rotation = imageProxy.imageInfo.rotationDegrees
+        val finalBitmap = if (rotation != 0) {
+            val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+            android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        } else {
+            bitmap
+        }
+        QrCodeGenerator.decodeQrFromBitmap(finalBitmap)
+    } catch (_: Exception) {
         null
     }
 }

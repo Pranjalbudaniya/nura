@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.nura.messaging.data.remote.auth.SupabaseAuthDataSource
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,6 +33,7 @@ class ChatRepositoryImpl @Inject constructor(
     private val conversationDao: ConversationDao,
     private val relayDataSource: MessageRelayDataSource,
     private val localContactsSource: ConnectionsLocalDataSource,
+    private val authDataSource: SupabaseAuthDataSource,
     private val auth: Auth,
     private val dispatchers: DispatcherProvider
 ) : ChatRepository {
@@ -272,7 +274,31 @@ class ChatRepositoryImpl @Inject constructor(
     ): ChatConversation = withContext(dispatchers.io) {
         val existing = conversationDao.getConversationByParticipant(participantId)
         if (existing != null) {
+            if (existing.participantName.startsWith("User ") || existing.participantAvatarUrl.isNullOrBlank()) {
+                val remote = authDataSource.fetchRemoteProfile(participantId)
+                if (remote != null) {
+                    val updated = existing.copy(
+                        participantName = remote.displayName.ifBlank { existing.participantName },
+                        participantUsername = remote.username.ifBlank { existing.participantUsername },
+                        participantAvatarUrl = remote.avatarUrl ?: existing.participantAvatarUrl
+                    )
+                    conversationDao.upsertConversation(updated)
+                    return@withContext updated.toDomain()
+                }
+            }
             return@withContext existing.toDomain()
+        }
+
+        var resolvedName = name
+        var resolvedUsername = username
+        var resolvedAvatar = avatarUrl
+        if (name.startsWith("User ") || avatarUrl.isNullOrBlank()) {
+            val remote = authDataSource.fetchRemoteProfile(participantId)
+            if (remote != null) {
+                resolvedName = remote.displayName.ifBlank { name }
+                resolvedUsername = remote.username.ifBlank { username }
+                resolvedAvatar = remote.avatarUrl ?: avatarUrl
+            }
         }
 
         val currentUserId = auth.currentUserOrNull()?.id ?: "me"
@@ -280,9 +306,9 @@ class ChatRepositoryImpl @Inject constructor(
         val newConv = ConversationEntity(
             conversationId = convId,
             participantId = participantId,
-            participantName = name,
-            participantUsername = username,
-            participantAvatarUrl = avatarUrl,
+            participantName = resolvedName,
+            participantUsername = resolvedUsername,
+            participantAvatarUrl = resolvedAvatar,
             lastMessage = null,
             lastMessageTimestamp = System.currentTimeMillis(),
             unreadCount = 0
@@ -291,20 +317,70 @@ class ChatRepositoryImpl @Inject constructor(
         newConv.toDomain()
     }
 
+    override suspend fun getParticipantProfile(participantId: String): com.nura.messaging.domain.entities.auth.RemoteUserProfile? = withContext(dispatchers.io) {
+        authDataSource.fetchRemoteProfile(participantId)
+    }
+
+    override suspend fun deleteConversation(conversationId: String): Result<Unit> = withContext(dispatchers.io) {
+        runCatching {
+            messageDao.deleteMessagesByConversation(conversationId)
+            conversationDao.deleteConversation(conversationId)
+        }
+    }
+
+    override suspend fun acceptConversation(conversationId: String): Result<Unit> = withContext(dispatchers.io) {
+        runCatching {
+            val conv = conversationDao.getConversationById(conversationId)
+            if (conv != null) {
+                val remote = authDataSource.fetchRemoteProfile(conv.participantId)
+                if (remote != null) {
+                    conversationDao.updateParticipantDetails(
+                        conversationId = conversationId,
+                        name = remote.displayName,
+                        username = remote.username,
+                        avatarUrl = remote.avatarUrl
+                    )
+                }
+            }
+            Unit
+        }
+    }
+
     private suspend fun updateConversationOnIncoming(dto: MessageRelayDto) {
         val existingConv = conversationDao.getConversationById(dto.conversationId)
             ?: conversationDao.getConversationByParticipant(dto.senderId)
 
         if (existingConv != null) {
             conversationDao.updateLastMessage(existingConv.conversationId, dto.content, dto.createdAt)
+            if (existingConv.participantName.startsWith("User ") || existingConv.participantAvatarUrl.isNullOrBlank()) {
+                val remote = authDataSource.fetchRemoteProfile(dto.senderId)
+                if (remote != null && remote.displayName.isNotBlank()) {
+                    conversationDao.upsertConversation(
+                        existingConv.copy(
+                            participantName = remote.displayName,
+                            participantUsername = remote.username.ifBlank { existingConv.participantUsername },
+                            participantAvatarUrl = remote.avatarUrl ?: existingConv.participantAvatarUrl,
+                            lastMessage = dto.content,
+                            lastMessageTimestamp = dto.createdAt
+                        )
+                    )
+                }
+            }
         } else {
             val currentUserId = auth.currentUserOrNull()?.id.orEmpty()
             val contact = localContactsSource.getRecentConnections(currentUserId)
                 .find { it.id == dto.senderId }
 
-            val displayName = contact?.displayName ?: "User ${dto.senderId.take(4)}"
-            val username = contact?.username ?: dto.senderId.take(6)
-            val avatarUrl = contact?.avatarUri
+            // Query Supabase directly so we have the real sender name, handle & avatar
+            val remote = authDataSource.fetchRemoteProfile(dto.senderId)
+
+            val displayName = remote?.displayName?.ifBlank { null }
+                ?: contact?.displayName
+                ?: "User ${dto.senderId.take(4)}"
+            val username = remote?.username?.ifBlank { null }
+                ?: contact?.username
+                ?: dto.senderId.take(6)
+            val avatarUrl = remote?.avatarUrl ?: contact?.avatarUri
 
             val newConv = ConversationEntity(
                 conversationId = dto.conversationId,

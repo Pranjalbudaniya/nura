@@ -10,10 +10,13 @@ data class ChatUiState(
     val participantName: String = "",
     val participantUsername: String = "",
     val participantAvatarUrl: String? = null,
+    val participantAbout: String = "HI there i'm using nura",
     val inputText: String = "",
     val messages: List<ChatMessage> = emptyList(),
     val isLoading: Boolean = false,
     val isSending: Boolean = false,
     val isProfileShared: Boolean = false,
+    val isRequest: Boolean = false,
+    val isAccepted: Boolean = false,
     val error: String? = null
 )
