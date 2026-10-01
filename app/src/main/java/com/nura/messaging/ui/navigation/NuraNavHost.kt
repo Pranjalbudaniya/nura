@@ -100,6 +100,14 @@ fun NuraNavHost(
 
     // Cold start gate: hold until session is checked without showing redundant splash
     if (uiState.isInitialSessionChecking) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
+            NuraBrandIcon(size = 72.dp)
+        }
         return
     }
 

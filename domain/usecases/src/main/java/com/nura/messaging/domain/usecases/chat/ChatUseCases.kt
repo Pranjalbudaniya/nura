@@ -20,12 +20,22 @@ class SendMessageUseCase @Inject constructor(
     suspend operator fun invoke(
         conversationId: String,
         receiverId: String,
-        content: String
+        content: String,
+        replyToMessageId: String? = null,
+        replyToContent: String? = null,
+        replyToSenderName: String? = null
     ): Result<ChatMessage> {
         if (content.isBlank()) {
             return Result.failure(IllegalArgumentException("Message content cannot be empty"))
         }
-        return repository.sendMessage(conversationId, receiverId, content.trim())
+        return repository.sendMessage(
+            conversationId = conversationId,
+            receiverId = receiverId,
+            content = content.trim(),
+            replyToMessageId = replyToMessageId,
+            replyToContent = replyToContent,
+            replyToSenderName = replyToSenderName
+        )
     }
 }
 
@@ -122,9 +132,21 @@ class SendMediaMessageUseCase @Inject constructor(
         receiverId: String,
         mediaUrl: String,
         messageType: String,
-        caption: String = ""
+        caption: String = "",
+        replyToMessageId: String? = null,
+        replyToContent: String? = null,
+        replyToSenderName: String? = null
     ): Result<ChatMessage> {
-        return repository.sendMediaMessage(conversationId, receiverId, mediaUrl, messageType, caption)
+        return repository.sendMediaMessage(
+            conversationId = conversationId,
+            receiverId = receiverId,
+            mediaUrl = mediaUrl,
+            messageType = messageType,
+            caption = caption,
+            replyToMessageId = replyToMessageId,
+            replyToContent = replyToContent,
+            replyToSenderName = replyToSenderName
+        )
     }
 }
 

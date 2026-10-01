@@ -124,7 +124,10 @@ class ChatUseCasesTest {
         override suspend fun sendMessage(
             conversationId: String,
             receiverId: String,
-            content: String
+            content: String,
+            replyToMessageId: String?,
+            replyToContent: String?,
+            replyToSenderName: String?
         ): Result<ChatMessage> {
             val msg = ChatMessage(
                 id = "m_${System.currentTimeMillis()}",
@@ -133,7 +136,10 @@ class ChatUseCasesTest {
                 receiverId = receiverId,
                 content = content,
                 status = MessageStatus.SENT,
-                isOutgoing = true
+                isOutgoing = true,
+                replyToMessageId = replyToMessageId,
+                replyToContent = replyToContent,
+                replyToSenderName = replyToSenderName
             )
             messagesList.add(msg)
             return Result.success(msg)
@@ -144,7 +150,10 @@ class ChatUseCasesTest {
             receiverId: String,
             mediaUrl: String,
             messageType: String,
-            caption: String
+            caption: String,
+            replyToMessageId: String?,
+            replyToContent: String?,
+            replyToSenderName: String?
         ): Result<ChatMessage> {
             val msg = ChatMessage(
                 id = "m_${System.currentTimeMillis()}",
@@ -154,7 +163,10 @@ class ChatUseCasesTest {
                 content = mediaUrl,
                 status = MessageStatus.SENT,
                 isOutgoing = true,
-                messageType = messageType
+                messageType = messageType,
+                replyToMessageId = replyToMessageId,
+                replyToContent = replyToContent,
+                replyToSenderName = replyToSenderName
             )
             messagesList.add(msg)
             return Result.success(msg)

@@ -14,6 +14,7 @@ import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.exceptions.HttpRequestException
 import io.github.jan.supabase.exceptions.RestException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonPrimitive
@@ -124,7 +125,7 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getCurrentUser(): AuthUser? = withContext(dispatchers.io) {
-        val user = remoteDataSource.getCurrentUser()?.toDomain()
+        val user = remoteDataSource.awaitInitialSession()?.toDomain()
         if (user != null && user.id.isNotBlank()) {
             checkAndIsolateAccount(user.id)
         }
@@ -132,12 +133,14 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override fun observeAuthState(): Flow<AuthUser?> {
-        return remoteDataSource.observeSessionStatus().map { status ->
-            when (status) {
-                is SessionStatus.Authenticated -> status.session.user?.toDomain()
-                else -> null
+        return remoteDataSource.observeSessionStatus()
+            .filter { it !is SessionStatus.Initializing }
+            .map { status ->
+                when (status) {
+                    is SessionStatus.Authenticated -> status.session.user?.toDomain()
+                    else -> null
+                }
             }
-        }
     }
 
     override suspend fun handleDeepLink(uriString: String): Boolean {

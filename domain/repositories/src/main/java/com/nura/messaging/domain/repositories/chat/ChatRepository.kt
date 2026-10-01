@@ -7,13 +7,23 @@ import kotlinx.coroutines.flow.Flow
 interface ChatRepository {
     fun getMessages(conversationId: String): Flow<List<ChatMessage>>
     fun getConversations(): Flow<List<ChatConversation>>
-    suspend fun sendMessage(conversationId: String, receiverId: String, content: String): Result<ChatMessage>
+    suspend fun sendMessage(
+        conversationId: String,
+        receiverId: String,
+        content: String,
+        replyToMessageId: String? = null,
+        replyToContent: String? = null,
+        replyToSenderName: String? = null
+    ): Result<ChatMessage>
     suspend fun sendMediaMessage(
         conversationId: String,
         receiverId: String,
         mediaUrl: String,
         messageType: String,
-        caption: String = ""
+        caption: String = "",
+        replyToMessageId: String? = null,
+        replyToContent: String? = null,
+        replyToSenderName: String? = null
     ): Result<ChatMessage>
     suspend fun uploadChatMedia(
         fileName: String,

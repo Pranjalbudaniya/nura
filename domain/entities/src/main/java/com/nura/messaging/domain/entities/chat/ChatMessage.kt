@@ -21,5 +21,8 @@ data class ChatMessage(
     val messageType: String = "text",
     val timestamp: Long = System.currentTimeMillis(),
     val status: MessageStatus = MessageStatus.PENDING,
-    val isOutgoing: Boolean = true
+    val isOutgoing: Boolean = true,
+    val replyToMessageId: String? = null,
+    val replyToContent: String? = null,
+    val replyToSenderName: String? = null
 )

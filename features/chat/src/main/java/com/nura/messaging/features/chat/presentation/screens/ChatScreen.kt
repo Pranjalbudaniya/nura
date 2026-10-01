@@ -30,6 +30,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -37,6 +47,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -68,9 +79,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.launch
 import androidx.core.content.ContextCompat
 import com.nura.messaging.features.chat.presentation.components.ChatImageCropDialog
 import com.nura.messaging.features.chat.presentation.components.EmojiPickerSection
@@ -166,6 +181,7 @@ private fun ChatScreenContent(
     val colors = NuraTheme.colors
     val colorScheme = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -426,6 +442,15 @@ private fun ChatScreenContent(
                                 timestamp = ts
                             )
                         },
+                        onReply = { viewModel.onReplyMessage(message) },
+                        onReplyClick = { replyId ->
+                            val index = uiState.messages.indexOfFirst { it.id == replyId }
+                            if (index >= 0) {
+                                coroutineScope.launch {
+                                    listState.animateScrollToItem(index + 1)
+                                }
+                            }
+                        },
                         onRetry = { viewModel.retryMessage(message.id) }
                     )
                 }
@@ -548,6 +573,87 @@ private fun ChatScreenContent(
                     }
                 }
             } else {
+                // Reply Preview Bar
+                AnimatedVisibility(
+                    visible = uiState.replyingToMessage != null,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    val replyingTo = uiState.replyingToMessage
+                    if (replyingTo != null) {
+                        val replySender = if (replyingTo.isOutgoing) "yourself" else uiState.participantName.ifBlank { "User" }
+                        val replySnippet = when (replyingTo.messageType) {
+                            "image" -> "📷 Photo"
+                            "video" -> "🎥 Video"
+                            "audio" -> "🎤 Voice message"
+                            else -> replyingTo.content
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 6.dp, bottomEnd = 6.dp))
+                                .background(colors.cardDarkBubble)
+                                .border(1.dp, colors.badgeBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 6.dp, bottomEnd = 6.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(3.5.dp)
+                                    .height(36.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(colors.terracottaAccent)
+                            )
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Reply,
+                                contentDescription = "Reply",
+                                tint = colors.terracottaAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Replying to $replySender",
+                                    fontFamily = PlusJakartaSansFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = colors.terracottaAccent,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = replySnippet,
+                                    fontFamily = PlusJakartaSansFamily,
+                                    fontSize = 13.sp,
+                                    color = colors.brandLogoText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            IconButton(
+                                onClick = viewModel::cancelReply,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Cancel reply",
+                                    tint = colors.subtitleText,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Bottom Input Bar
                 Row(
                     modifier = Modifier
@@ -1070,6 +1176,8 @@ private fun MessageBubble(
     participantName: String,
     onPlayAudio: (messageId: String, audioUrl: String) -> Unit,
     onMediaClick: (mediaUrl: String, mediaType: String, senderName: String, timestamp: Long) -> Unit,
+    onReply: (message: ChatMessage) -> Unit,
+    onReplyClick: (replyMessageId: String) -> Unit,
     onRetry: () -> Unit
 ) {
     val colors = NuraTheme.colors
@@ -1077,12 +1185,68 @@ private fun MessageBubble(
     val formattedTime = timeFormat.format(Date(message.timestamp))
     val senderName = if (message.isOutgoing) "You" else participantName.ifBlank { "User" }
 
+    val offsetX = remember { Animatable(0f) }
+    val coroutineScope = rememberCoroutineScope()
+    val replyTriggerThreshold = 44f
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isOutgoing) Arrangement.End else Arrangement.Start
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(message.id) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (offsetX.value >= replyTriggerThreshold) {
+                            onReply(message)
+                        }
+                        coroutineScope.launch {
+                            offsetX.animateTo(
+                                targetValue = 0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                )
+                            )
+                        }
+                    },
+                    onDragCancel = {
+                        coroutineScope.launch {
+                            offsetX.animateTo(0f)
+                        }
+                    },
+                    onHorizontalDrag = { _, dragAmount ->
+                        coroutineScope.launch {
+                            val newOffset = (offsetX.value + dragAmount).coerceIn(0f, 68f)
+                            offsetX.snapTo(newOffset)
+                        }
+                    }
+                )
+            },
+        horizontalArrangement = if (message.isOutgoing) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        // Drag-to-reply icon that fades in & scales
+        if (offsetX.value > 6f) {
+            val progress = (offsetX.value / replyTriggerThreshold).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(colors.terracottaAccent.copy(alpha = 0.2f + 0.8f * progress)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Reply,
+                    contentDescription = "Reply",
+                    tint = Color.White,
+                    modifier = Modifier.size((14 + 4 * progress).dp)
+                )
+            }
+        }
+
         Column(
             modifier = Modifier
+                .offset { IntOffset(offsetX.value.toInt(), 0) }
                 .widthIn(max = 280.dp)
                 .clip(
                     RoundedCornerShape(
@@ -1105,8 +1269,70 @@ private fun MessageBubble(
                         bottomEnd = if (message.isOutgoing) 4.dp else 16.dp
                     )
                 )
+                .pointerInput(message.id) {
+                    detectTapGestures(
+                        onLongPress = {
+                            onReply(message)
+                        },
+                        onDoubleTap = {
+                            onReply(message)
+                        }
+                    )
+                }
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
+            // Quoted message header
+            val replyContent = message.replyToContent
+            if (!replyContent.isNullOrBlank()) {
+                val quoteBg = if (message.isOutgoing) colors.badgeBackground else Color.Black.copy(alpha = 0.18f)
+                val quoteBarColor = if (message.isOutgoing) colors.terracottaAccent else Color.White
+                val quoteSenderColor = if (message.isOutgoing) colors.terracottaAccent else Color.White.copy(alpha = 0.95f)
+                val quoteTextColor = if (message.isOutgoing) colors.subtitleText else Color.White.copy(alpha = 0.82f)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(quoteBg)
+                        .clickable {
+                            message.replyToMessageId?.let { id -> onReplyClick(id) }
+                        }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(28.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(quoteBarColor)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = message.replyToSenderName ?: "Replying",
+                            fontFamily = PlusJakartaSansFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = quoteSenderColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(1.dp))
+                        Text(
+                            text = replyContent,
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 12.sp,
+                            color = quoteTextColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
             when (message.messageType) {
                 "image" -> {
                     AsyncImage(

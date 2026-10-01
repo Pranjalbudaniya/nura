@@ -26,7 +26,13 @@ data class MessageRelayDto(
     @SerialName("sender_avatar")
     val senderAvatar: String? = null,
     @SerialName("media_url")
-    val mediaUrl: String? = null
+    val mediaUrl: String? = null,
+    @SerialName("reply_to_message_id")
+    val replyToMessageId: String? = null,
+    @SerialName("reply_to_content")
+    val replyToContent: String? = null,
+    @SerialName("reply_to_sender_name")
+    val replyToSenderName: String? = null
 )
 
 @Serializable

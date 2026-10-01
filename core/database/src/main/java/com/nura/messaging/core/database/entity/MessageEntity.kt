@@ -24,7 +24,10 @@ data class MessageEntity(
     val messageType: String = "text",
     val timestamp: Long = System.currentTimeMillis(),
     val status: String = MessageStatus.PENDING.name,
-    val isOutgoing: Boolean = true
+    val isOutgoing: Boolean = true,
+    val replyToMessageId: String? = null,
+    val replyToContent: String? = null,
+    val replyToSenderName: String? = null
 ) {
     fun toDomain(): ChatMessage {
         return ChatMessage(
@@ -36,7 +39,10 @@ data class MessageEntity(
             messageType = messageType,
             timestamp = timestamp,
             status = runCatching { MessageStatus.valueOf(status) }.getOrDefault(MessageStatus.PENDING),
-            isOutgoing = isOutgoing
+            isOutgoing = isOutgoing,
+            replyToMessageId = replyToMessageId,
+            replyToContent = replyToContent,
+            replyToSenderName = replyToSenderName
         )
     }
 
@@ -51,7 +57,10 @@ data class MessageEntity(
                 messageType = domain.messageType,
                 timestamp = domain.timestamp,
                 status = domain.status.name,
-                isOutgoing = domain.isOutgoing
+                isOutgoing = domain.isOutgoing,
+                replyToMessageId = domain.replyToMessageId,
+                replyToContent = domain.replyToContent,
+                replyToSenderName = domain.replyToSenderName
             )
         }
     }

@@ -149,6 +149,40 @@ class ChatViewModelTest {
         assertEquals("New message", state.messages[1].content)
     }
 
+    @Test
+    fun `onReplyMessage and cancelReply properly manage reply state`() = runTest {
+        viewModel.initChat("conv_123", "user_456", "Maya Lin", "mayal", null)
+        advanceUntilIdle()
+
+        val targetMessage = viewModel.uiState.value.messages[0]
+        viewModel.onReplyMessage(targetMessage)
+        assertEquals(targetMessage, viewModel.uiState.value.replyingToMessage)
+
+        viewModel.cancelReply()
+        assertEquals(null, viewModel.uiState.value.replyingToMessage)
+    }
+
+    @Test
+    fun `sendMessage with reply attaches reply metadata and clears replyingToMessage`() = runTest {
+        viewModel.initChat("conv_123", "user_456", "Maya Lin", "mayal", null)
+        advanceUntilIdle()
+
+        val targetMessage = viewModel.uiState.value.messages[0]
+        viewModel.onReplyMessage(targetMessage)
+        viewModel.onInputTextChanged("Replying back")
+        viewModel.sendMessage()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(null, state.replyingToMessage)
+        assertEquals(2, state.messages.size)
+        val sentMessage = state.messages[1]
+        assertEquals("Replying back", sentMessage.content)
+        assertEquals("m1", sentMessage.replyToMessageId)
+        assertEquals("Hey there!", sentMessage.replyToContent)
+        assertEquals("Maya Lin", sentMessage.replyToSenderName)
+    }
+
     private class FakeChatRepository : ChatRepository {
         val messages = mutableListOf(
             ChatMessage(
@@ -171,7 +205,10 @@ class ChatViewModelTest {
         override suspend fun sendMessage(
             conversationId: String,
             receiverId: String,
-            content: String
+            content: String,
+            replyToMessageId: String?,
+            replyToContent: String?,
+            replyToSenderName: String?
         ): Result<ChatMessage> {
             val msg = ChatMessage(
                 id = "m2",
@@ -180,7 +217,10 @@ class ChatViewModelTest {
                 receiverId = receiverId,
                 content = content,
                 status = MessageStatus.SENT,
-                isOutgoing = true
+                isOutgoing = true,
+                replyToMessageId = replyToMessageId,
+                replyToContent = replyToContent,
+                replyToSenderName = replyToSenderName
             )
             messages.add(msg)
             return Result.success(msg)
@@ -191,7 +231,10 @@ class ChatViewModelTest {
             receiverId: String,
             mediaUrl: String,
             messageType: String,
-            caption: String
+            caption: String,
+            replyToMessageId: String?,
+            replyToContent: String?,
+            replyToSenderName: String?
         ): Result<ChatMessage> {
             val msg = ChatMessage(
                 id = "m_media",
@@ -201,7 +244,10 @@ class ChatViewModelTest {
                 content = mediaUrl,
                 messageType = messageType,
                 status = MessageStatus.SENT,
-                isOutgoing = true
+                isOutgoing = true,
+                replyToMessageId = replyToMessageId,
+                replyToContent = replyToContent,
+                replyToSenderName = replyToSenderName
             )
             messages.add(msg)
             return Result.success(msg)

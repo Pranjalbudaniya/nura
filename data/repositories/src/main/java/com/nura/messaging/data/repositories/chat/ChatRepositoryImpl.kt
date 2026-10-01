@@ -93,7 +93,10 @@ class ChatRepositoryImpl @Inject constructor(
     override suspend fun sendMessage(
         conversationId: String,
         receiverId: String,
-        content: String
+        content: String,
+        replyToMessageId: String?,
+        replyToContent: String?,
+        replyToSenderName: String?
     ): Result<ChatMessage> = withContext(dispatchers.io) {
         val currentUserId = auth.currentUserOrNull()?.id ?: "me"
         val messageId = UUID.randomUUID().toString()
@@ -109,7 +112,10 @@ class ChatRepositoryImpl @Inject constructor(
             messageType = "text",
             timestamp = now,
             status = MessageStatus.PENDING.name,
-            isOutgoing = true
+            isOutgoing = true,
+            replyToMessageId = replyToMessageId,
+            replyToContent = replyToContent,
+            replyToSenderName = replyToSenderName
         )
         messageDao.upsertMessage(localMessage)
 
@@ -158,7 +164,10 @@ class ChatRepositoryImpl @Inject constructor(
             createdAt = now,
             deliveryStatus = "SENT_TO_SERVER",
             senderName = senderName,
-            senderAvatar = senderAvatar
+            senderAvatar = senderAvatar,
+            replyToMessageId = replyToMessageId,
+            replyToContent = replyToContent,
+            replyToSenderName = replyToSenderName
         )
 
         val uploadResult = relayDataSource.sendMessageToRelay(relayDto)
@@ -178,7 +187,10 @@ class ChatRepositoryImpl @Inject constructor(
         receiverId: String,
         mediaUrl: String,
         messageType: String,
-        caption: String
+        caption: String,
+        replyToMessageId: String?,
+        replyToContent: String?,
+        replyToSenderName: String?
     ): Result<ChatMessage> = withContext(dispatchers.io) {
         val currentUserId = auth.currentUserOrNull()?.id ?: "me"
         val messageId = UUID.randomUUID().toString()
@@ -194,7 +206,10 @@ class ChatRepositoryImpl @Inject constructor(
             messageType = messageType,
             timestamp = now,
             status = MessageStatus.PENDING.name,
-            isOutgoing = true
+            isOutgoing = true,
+            replyToMessageId = replyToMessageId,
+            replyToContent = replyToContent,
+            replyToSenderName = replyToSenderName
         )
         messageDao.upsertMessage(localMessage)
 
@@ -248,7 +263,10 @@ class ChatRepositoryImpl @Inject constructor(
             deliveryStatus = "SENT_TO_SERVER",
             senderName = senderName,
             senderAvatar = senderAvatar,
-            mediaUrl = mediaUrl
+            mediaUrl = mediaUrl,
+            replyToMessageId = replyToMessageId,
+            replyToContent = replyToContent,
+            replyToSenderName = replyToSenderName
         )
 
         val uploadResult = relayDataSource.sendMessageToRelay(relayDto)
@@ -333,7 +351,10 @@ class ChatRepositoryImpl @Inject constructor(
                     messageType = dto.messageType,
                     timestamp = dto.createdAt,
                     status = MessageStatus.DELIVERED.name,
-                    isOutgoing = false
+                    isOutgoing = false,
+                    replyToMessageId = dto.replyToMessageId,
+                    replyToContent = dto.replyToContent,
+                    replyToSenderName = dto.replyToSenderName
                 )
                 messageDao.insertMessage(entity)
 
@@ -395,7 +416,10 @@ class ChatRepositoryImpl @Inject constructor(
                             messageType = dto.messageType,
                             timestamp = dto.createdAt,
                             status = MessageStatus.DELIVERED.name,
-                            isOutgoing = false
+                            isOutgoing = false,
+                            replyToMessageId = dto.replyToMessageId,
+                            replyToContent = dto.replyToContent,
+                            replyToSenderName = dto.replyToSenderName
                         )
                         messageDao.insertMessage(entity)
 

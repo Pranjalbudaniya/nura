@@ -22,6 +22,6 @@ data class ChatUiState(
     val isEmojiPickerVisible: Boolean = false,
     val isRecordingAudio: Boolean = false,
     val recordingDurationSeconds: Int = 0,
+    val replyingToMessage: ChatMessage? = null,
     val error: String? = null
-
 )

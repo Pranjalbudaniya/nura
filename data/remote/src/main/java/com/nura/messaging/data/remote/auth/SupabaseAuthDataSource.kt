@@ -13,7 +13,9 @@ import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.auth.user.UserInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
@@ -155,6 +157,17 @@ class SupabaseAuthDataSource @Inject constructor(
             token = token
         )
         return auth.currentUserOrNull() ?: throw IllegalStateException("User session not found after OTP verification")
+    }
+
+    suspend fun awaitInitialSession(timeoutMillis: Long = 1500L): UserInfo? {
+        val status = withTimeoutOrNull(timeoutMillis) {
+            auth.sessionStatus.first { it !is SessionStatus.Initializing }
+        }
+        return if (status is SessionStatus.Authenticated) {
+            status.session.user ?: auth.currentUserOrNull()
+        } else {
+            auth.currentUserOrNull()
+        }
     }
 
     fun getCurrentUser(): UserInfo? {

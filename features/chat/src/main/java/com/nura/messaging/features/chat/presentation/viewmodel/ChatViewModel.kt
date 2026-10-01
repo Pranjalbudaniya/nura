@@ -3,6 +3,7 @@ package com.nura.messaging.features.chat.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nura.messaging.core.common.util.DispatcherProvider
+import com.nura.messaging.domain.entities.chat.ChatMessage
 import com.nura.messaging.domain.usecases.chat.GetConversationsUseCase
 import com.nura.messaging.domain.usecases.chat.GetMessagesUseCase
 import com.nura.messaging.domain.usecases.chat.GetOrCreateConversationUseCase
@@ -172,15 +173,25 @@ class ChatViewModel @Inject constructor(
         _uiState.update { it.copy(inputText = text) }
     }
 
+    fun onReplyMessage(message: ChatMessage) {
+        _uiState.update { it.copy(replyingToMessage = message) }
+    }
+
+    fun cancelReply() {
+        _uiState.update { it.copy(replyingToMessage = null) }
+    }
+
     fun sendMessage() {
         val current = _uiState.value
         val text = current.inputText.trim()
+        val replyingTo = current.replyingToMessage
         if (text.isBlank() || current.conversationId.isBlank() || current.participantId.isBlank()) return
 
         // Clear input immediately for smooth UX, and if it was a request, mark as accepted & shared
         _uiState.update {
             it.copy(
                 inputText = "",
+                replyingToMessage = null,
                 isSending = true,
                 isAccepted = true,
                 isProfileShared = true
@@ -190,10 +201,22 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch(dispatchers.io) {
             acceptConversationUseCase(current.conversationId)
             markConversationAsReadUseCase(current.conversationId)
+
+            val replySnippet = when (replyingTo?.messageType) {
+                "image" -> "📷 Photo"
+                "video" -> "🎥 Video"
+                "audio" -> "🎤 Voice message"
+                else -> replyingTo?.content?.take(100)
+            }
+            val replySender = if (replyingTo?.isOutgoing == true) "You" else current.participantName
+
             val result = sendMessageUseCase(
                 conversationId = current.conversationId,
                 receiverId = current.participantId,
-                content = text
+                content = text,
+                replyToMessageId = replyingTo?.id,
+                replyToContent = replySnippet,
+                replyToSenderName = replySender
             )
             _uiState.update { it.copy(isSending = false) }
             if (result.isFailure) {
@@ -258,10 +281,12 @@ class ChatViewModel @Inject constructor(
 
     fun sendMedia(bytes: ByteArray, mimeType: String, messageType: String, extension: String) {
         val current = _uiState.value
+        val replyingTo = current.replyingToMessage
         if (current.conversationId.isBlank() || current.participantId.isBlank()) return
 
         _uiState.update {
             it.copy(
+                replyingToMessage = null,
                 isUploadingMedia = true,
                 isAccepted = true,
                 isProfileShared = true
@@ -272,6 +297,14 @@ class ChatViewModel @Inject constructor(
             acceptConversationUseCase(current.conversationId)
             markConversationAsReadUseCase(current.conversationId)
 
+            val replySnippet = when (replyingTo?.messageType) {
+                "image" -> "📷 Photo"
+                "video" -> "🎥 Video"
+                "audio" -> "🎤 Voice message"
+                else -> replyingTo?.content?.take(100)
+            }
+            val replySender = if (replyingTo?.isOutgoing == true) "You" else current.participantName
+
             val fileName = "chat_${java.util.UUID.randomUUID()}.$extension"
             val uploadResult = uploadChatMediaUseCase(fileName, bytes, mimeType)
             if (uploadResult.isSuccess) {
@@ -280,7 +313,11 @@ class ChatViewModel @Inject constructor(
                     conversationId = current.conversationId,
                     receiverId = current.participantId,
                     mediaUrl = mediaUrl,
-                    messageType = messageType
+                    messageType = messageType,
+                    caption = "",
+                    replyToMessageId = replyingTo?.id,
+                    replyToContent = replySnippet,
+                    replyToSenderName = replySender
                 )
                 _uiState.update { it.copy(isUploadingMedia = false) }
                 if (sendResult.isFailure) {
