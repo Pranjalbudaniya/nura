@@ -3,6 +3,7 @@ package com.nura.messaging.features.chat.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nura.messaging.core.common.util.DispatcherProvider
+import com.nura.messaging.domain.usecases.chat.GetConversationsUseCase
 import com.nura.messaging.domain.usecases.chat.GetMessagesUseCase
 import com.nura.messaging.domain.usecases.chat.GetOrCreateConversationUseCase
 import com.nura.messaging.domain.usecases.chat.ObserveIncomingMessagesUseCase
@@ -30,6 +31,7 @@ import javax.inject.Inject
 class ChatViewModel @Inject constructor(
     private val getMessagesUseCase: GetMessagesUseCase,
     private val getOrCreateConversationUseCase: GetOrCreateConversationUseCase,
+    private val getConversationsUseCase: GetConversationsUseCase,
     private val sendMessageUseCase: SendMessageUseCase,
     private val sendMediaMessageUseCase: SendMediaMessageUseCase,
     private val uploadChatMediaUseCase: UploadChatMediaUseCase,
@@ -48,6 +50,7 @@ class ChatViewModel @Inject constructor(
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     private var messagesJob: Job? = null
+    private var conversationJob: Job? = null
     private var realtimeJob: Job? = null
     private var recordingTimerJob: Job? = null
 
@@ -100,8 +103,30 @@ class ChatViewModel @Inject constructor(
                 username = participantUsername,
                 avatarUrl = participantAvatarUrl
             )
-            if (conv.isAccepted) {
-                _uiState.update { it.copy(isAccepted = true, isProfileShared = true) }
+            _uiState.update {
+                it.copy(
+                    isAccepted = conv.isAccepted,
+                    isProfileShared = conv.isAccepted || it.isProfileShared,
+                    participantAvatarUrl = conv.participantAvatarUrl ?: it.participantAvatarUrl
+                )
+            }
+        }
+
+        // Observe conversation updates in Room (e.g. accepted status and local avatar storage)
+        conversationJob?.cancel()
+        conversationJob = viewModelScope.launch(dispatchers.main) {
+            getConversationsUseCase().collect { convList ->
+                val currentConv = convList.find { it.conversationId == conversationId }
+                if (currentConv != null) {
+                    _uiState.update { current ->
+                        current.copy(
+                            isAccepted = currentConv.isAccepted,
+                            isProfileShared = currentConv.isAccepted || current.isProfileShared,
+                            participantAvatarUrl = currentConv.participantAvatarUrl ?: current.participantAvatarUrl,
+                            participantName = currentConv.participantName.ifBlank { current.participantName }
+                        )
+                    }
+                }
             }
         }
 

@@ -256,8 +256,8 @@ class SupabaseAuthDataSource @Inject constructor(
     ): UserInfo? {
         val token = auth.currentAccessTokenOrNull()
 
-        // If user changed to a preset or removed custom avatar, delete old image from storage
-        if (avatarUrl == null || avatarUrl.startsWith("preset:") || avatarUrl.startsWith("color:")) {
+        // If user explicitly changed to a preset or removed custom avatar, delete old image from storage
+        if (avatarUrl == "" || avatarUrl?.startsWith("preset:") == true || avatarUrl?.startsWith("color:") == true) {
             deleteAvatarFromStorage(userId)
         }
 
@@ -272,6 +272,8 @@ class SupabaseAuthDataSource @Inject constructor(
                         put("about", about)
                         if (!avatarUrl.isNullOrBlank()) {
                             put("avatar_url", avatarUrl)
+                        } else if (avatarUrl == "") {
+                            put("avatar_url", "")
                         }
                     })
                 }.toString()
@@ -299,6 +301,8 @@ class SupabaseAuthDataSource @Inject constructor(
                 put("about", about)
                 if (!avatarUrl.isNullOrBlank()) {
                     put("avatar_url", avatarUrl)
+                } else if (avatarUrl == "") {
+                    put("avatar_url", "")
                 }
             }.toString()
 

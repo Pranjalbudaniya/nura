@@ -60,6 +60,7 @@ class ChatViewModelTest {
         viewModel = ChatViewModel(
             getMessagesUseCase = GetMessagesUseCase(fakeRepository),
             getOrCreateConversationUseCase = GetOrCreateConversationUseCase(fakeRepository),
+            getConversationsUseCase = GetConversationsUseCase(fakeRepository),
             sendMessageUseCase = SendMessageUseCase(fakeRepository),
             syncPendingMessagesUseCase = SyncPendingMessagesUseCase(fakeRepository),
             observeIncomingMessagesUseCase = ObserveIncomingMessagesUseCase(fakeRepository),

@@ -65,28 +65,53 @@ open class ConnectionsLocalDataSource @Inject constructor(
             return@withContext sourceUriString
         }
 
+        if (sourceUriString.startsWith("preset:") || sourceUriString.startsWith("color:")) {
+            getPrefs(userId)?.edit()
+                ?.putString(KEY_USER_AVATAR, sourceUriString)
+                ?.apply()
+            inMemoryAvatars[userId] = sourceUriString
+            return@withContext sourceUriString
+        }
+
         try {
             val avatarsDir = File(context.filesDir, "user_avatars").apply { mkdirs() }
             val destFile = File(avatarsDir, "${userId}_avatar.jpg")
 
-            val uri = Uri.parse(sourceUriString)
-            val inputStream = when {
-                uri.scheme == "file" -> {
-                    val path = uri.path ?: sourceUriString.removePrefix("file://")
-                    File(path).inputStream()
+            when {
+                sourceUriString.startsWith("data:image") -> {
+                    val base64 = sourceUriString.substringAfter(",")
+                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                    destFile.writeBytes(bytes)
                 }
-                uri.scheme == "content" -> {
-                    context.contentResolver.openInputStream(uri)
+                sourceUriString.startsWith("http://") || sourceUriString.startsWith("https://") -> {
+                    val stream = java.net.URL(sourceUriString).openStream()
+                    stream.use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
                 }
                 else -> {
-                    val f = File(sourceUriString)
-                    if (f.exists()) f.inputStream() else context.contentResolver.openInputStream(uri)
-                }
-            }
+                    val uri = Uri.parse(sourceUriString)
+                    val inputStream = when {
+                        uri.scheme == "file" -> {
+                            val path = uri.path ?: sourceUriString.removePrefix("file://")
+                            File(path).inputStream()
+                        }
+                        uri.scheme == "content" -> {
+                            context.contentResolver.openInputStream(uri)
+                        }
+                        else -> {
+                            val f = File(sourceUriString)
+                            if (f.exists()) f.inputStream() else context.contentResolver.openInputStream(uri)
+                        }
+                    }
 
-            inputStream?.use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
+                    inputStream?.use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
                 }
             }
 

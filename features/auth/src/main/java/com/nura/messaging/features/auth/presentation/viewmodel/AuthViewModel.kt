@@ -66,8 +66,56 @@ class AuthViewModel @Inject constructor(
     private val getUserPresetColorUseCase: GetUserPresetColorUseCase,
     private val updateProfileUseCase: UpdateProfileUseCase,
     private val uploadAvatarUseCase: UploadAvatarUseCase,
-    @ApplicationContext private val context: Context? = null
+    @ApplicationContext private val context: Context?
 ) : ViewModel() {
+
+    // Secondary constructor for testing
+    internal constructor(
+        signInWithEmailUseCase: SignInWithEmailUseCase,
+        signUpWithEmailUseCase: SignUpWithEmailUseCase,
+        checkUsernameAvailabilityUseCase: CheckUsernameAvailabilityUseCase,
+        signInWithGoogleUseCase: SignInWithGoogleUseCase,
+        signOutUseCase: SignOutUseCase,
+        sendPasswordResetUseCase: SendPasswordResetUseCase,
+        resendEmailVerificationUseCase: ResendEmailVerificationUseCase,
+        sendEmailOtpUseCase: SendEmailOtpUseCase,
+        verifyEmailOtpUseCase: VerifyEmailOtpUseCase,
+        observeAuthStateUseCase: ObserveAuthStateUseCase,
+        getCurrentUserUseCase: GetCurrentUserUseCase,
+        onboardingPreferences: OnboardingPreferences,
+        dispatchers: DispatcherProvider,
+        saveUserProfilePictureUseCase: SaveUserProfilePictureUseCase,
+        getLocalProfilePictureUseCase: GetLocalProfilePictureUseCase,
+        saveUserPresetAvatarUseCase: SaveUserPresetAvatarUseCase,
+        saveUserPresetColorUseCase: SaveUserPresetColorUseCase,
+        getUserPresetIndexUseCase: GetUserPresetIndexUseCase,
+        getUserPresetColorUseCase: GetUserPresetColorUseCase,
+        updateProfileUseCase: UpdateProfileUseCase,
+        uploadAvatarUseCase: UploadAvatarUseCase
+    ) : this(
+        signInWithEmailUseCase = signInWithEmailUseCase,
+        signUpWithEmailUseCase = signUpWithEmailUseCase,
+        checkUsernameAvailabilityUseCase = checkUsernameAvailabilityUseCase,
+        signInWithGoogleUseCase = signInWithGoogleUseCase,
+        signOutUseCase = signOutUseCase,
+        sendPasswordResetUseCase = sendPasswordResetUseCase,
+        resendEmailVerificationUseCase = resendEmailVerificationUseCase,
+        sendEmailOtpUseCase = sendEmailOtpUseCase,
+        verifyEmailOtpUseCase = verifyEmailOtpUseCase,
+        observeAuthStateUseCase = observeAuthStateUseCase,
+        getCurrentUserUseCase = getCurrentUserUseCase,
+        onboardingPreferences = onboardingPreferences,
+        dispatchers = dispatchers,
+        saveUserProfilePictureUseCase = saveUserProfilePictureUseCase,
+        getLocalProfilePictureUseCase = getLocalProfilePictureUseCase,
+        saveUserPresetAvatarUseCase = saveUserPresetAvatarUseCase,
+        saveUserPresetColorUseCase = saveUserPresetColorUseCase,
+        getUserPresetIndexUseCase = getUserPresetIndexUseCase,
+        getUserPresetColorUseCase = getUserPresetColorUseCase,
+        updateProfileUseCase = updateProfileUseCase,
+        uploadAvatarUseCase = uploadAvatarUseCase,
+        context = null
+    )
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -756,9 +804,18 @@ class AuthViewModel @Inject constructor(
             val presetIdx = _uiState.value.selectedPresetIndex
             val presetColor = _uiState.value.selectedPresetColor
             val avatarUrl = when {
-                presetIdx != null -> "preset:$presetIdx"
-                presetColor != null -> "color:$presetColor"
-                !pic.isNullOrBlank() && !pic.startsWith("preset:") && !pic.startsWith("color:") -> processAndUploadAvatar(current.id, pic)
+                presetIdx != null -> {
+                    saveUserPresetAvatarUseCase(current.id, presetIdx)
+                    "preset:$presetIdx"
+                }
+                presetColor != null -> {
+                    saveUserPresetColorUseCase(current.id, presetColor)
+                    "color:$presetColor"
+                }
+                !pic.isNullOrBlank() && !pic.startsWith("preset:") && !pic.startsWith("color:") -> {
+                    saveUserProfilePictureUseCase(current.id, pic)
+                    processAndUploadAvatar(current.id, pic)
+                }
                 else -> null
             }
 

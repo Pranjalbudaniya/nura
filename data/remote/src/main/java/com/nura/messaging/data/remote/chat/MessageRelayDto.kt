@@ -60,3 +60,17 @@ fun MessageRelayDto.toTableDto(): MessageRelayTableDto = MessageRelayTableDto(
     deliveryStatus = deliveryStatus
 )
 
+@Serializable
+data class ConversationAcceptedDto(
+    @SerialName("conversation_id")
+    val conversationId: String,
+    @SerialName("acceptor_id")
+    val acceptorId: String,
+    @SerialName("acceptor_name")
+    val acceptorName: String,
+    @SerialName("acceptor_username")
+    val acceptorUsername: String,
+    @SerialName("acceptor_avatar_url")
+    val acceptorAvatarUrl: String? = null
+)
+

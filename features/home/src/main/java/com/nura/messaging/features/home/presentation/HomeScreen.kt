@@ -1257,8 +1257,7 @@ private fun ConversationRowItem(
         Box(
             modifier = Modifier.size(48.dp)
         ) {
-            val isAvatarVisible = !conversation.avatarUrl.isNullOrBlank()
-
+            val isAvatarVisible = conversation.isAccepted && !conversation.avatarUrl.isNullOrBlank()
 
             if (isAvatarVisible) {
                 val rawAvatar = conversation.avatarUrl!!
@@ -1337,7 +1336,7 @@ private fun ConversationRowItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = conversation.initials,
+                        text = conversation.initials.take(1),
                         fontFamily = PlusJakartaSansFamily,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 16.sp,

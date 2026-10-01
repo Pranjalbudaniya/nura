@@ -23,7 +23,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.nura.messaging.data.remote.auth.SupabaseAuthDataSource
+import com.nura.messaging.data.remote.chat.ConversationAcceptedDto
 import com.nura.messaging.domain.repositories.notification.NotificationService
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonPrimitive
 import java.util.UUID
 import javax.inject.Inject
@@ -44,6 +46,31 @@ class ChatRepositoryImpl @Inject constructor(
 
     companion object {
         private const val TAG = "ChatRepositoryImpl"
+    }
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private fun resolveTransferrableAvatar(avatar: String?): String? {
+        if (avatar.isNullOrBlank()) return null
+        if (avatar.startsWith("preset:") || avatar.startsWith("color:") ||
+            avatar.startsWith("http://") || avatar.startsWith("https://") ||
+            avatar.startsWith("data:")) {
+            return avatar
+        }
+        return try {
+            val uri = android.net.Uri.parse(avatar)
+            val path = uri.path ?: avatar.removePrefix("file://")
+            val file = java.io.File(path)
+            if (file.exists()) {
+                val bytes = file.readBytes()
+                "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            } else {
+                avatar
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not resolve transferrable avatar from $avatar: ${e.message}")
+            avatar
+        }
     }
 
     override fun getMessages(conversationId: String): Flow<List<ChatMessage>> {
@@ -89,7 +116,6 @@ class ChatRepositoryImpl @Inject constructor(
         val existing = conversationDao.getConversationById(conversationId)
         if (existing != null) {
             conversationDao.updateLastMessage(conversationId, content, now)
-            conversationDao.acceptConversation(conversationId)
         } else {
             // Check if contact exists in local connections for receiver details
             val contact = localContactsSource.getRecentConnections(currentUserId)
@@ -108,7 +134,7 @@ class ChatRepositoryImpl @Inject constructor(
                     lastMessage = content,
                     lastMessageTimestamp = now,
                     unreadCount = 0,
-                    isAccepted = true
+                    isAccepted = false
                 )
             )
         }
@@ -118,7 +144,8 @@ class ChatRepositoryImpl @Inject constructor(
         val senderName = currentUser?.userMetadata?.get("display_name")?.jsonPrimitive?.content
             ?: currentUser?.userMetadata?.get("full_name")?.jsonPrimitive?.content
             ?: "User"
-        val senderAvatar = currentUser?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+        val rawAvatar = currentUser?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+        val senderAvatar = resolveTransferrableAvatar(rawAvatar)
 
         // 2. Transmit message via Supabase Realtime Broadcast & persistent relay
         val relayDto = MessageRelayDto(
@@ -181,7 +208,6 @@ class ChatRepositoryImpl @Inject constructor(
         val existing = conversationDao.getConversationById(conversationId)
         if (existing != null) {
             conversationDao.updateLastMessage(conversationId, snippet, now)
-            conversationDao.acceptConversation(conversationId)
         } else {
             val contact = localContactsSource.getRecentConnections(currentUserId)
                 .find { it.id == receiverId }
@@ -199,7 +225,7 @@ class ChatRepositoryImpl @Inject constructor(
                     lastMessage = snippet,
                     lastMessageTimestamp = now,
                     unreadCount = 0,
-                    isAccepted = true
+                    isAccepted = false
                 )
             )
         }
@@ -208,7 +234,8 @@ class ChatRepositoryImpl @Inject constructor(
         val senderName = currentUser?.userMetadata?.get("display_name")?.jsonPrimitive?.content
             ?: currentUser?.userMetadata?.get("full_name")?.jsonPrimitive?.content
             ?: "User"
-        val senderAvatar = currentUser?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+        val rawAvatar = currentUser?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+        val senderAvatar = resolveTransferrableAvatar(rawAvatar)
 
         val relayDto = MessageRelayDto(
             messageId = messageId,
@@ -281,6 +308,21 @@ class ChatRepositoryImpl @Inject constructor(
             Log.d(TAG, "Sync: Processing ${pendingMessages.size} pending relay messages")
 
             for (dto in pendingMessages) {
+                if (dto.messageType == "system_accept") {
+                    try {
+                        val acceptDto = json.decodeFromString(ConversationAcceptedDto.serializer(), dto.content)
+                        handleConversationAccepted(acceptDto)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to decode system_accept message: ${e.message}")
+                    }
+                    relayDataSource.acknowledgeAndRemoveMessage(
+                        messageId = dto.messageId,
+                        senderId = dto.senderId,
+                        receiverId = currentUserId
+                    )
+                    continue
+                }
+
                 // Idempotent write into Room database
                 val entity = MessageEntity(
                     messageId = dto.messageId,
@@ -329,6 +371,21 @@ class ChatRepositoryImpl @Inject constructor(
                 // 1. Listen for incoming messages
                 val msgJob = launch(dispatchers.io) {
                     relayDataSource.observeIncomingMessages(userId).collect { dto ->
+                        if (dto.messageType == "system_accept") {
+                            try {
+                                val acceptDto = json.decodeFromString(ConversationAcceptedDto.serializer(), dto.content)
+                                handleConversationAccepted(acceptDto)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Failed to decode realtime system_accept message: ${e.message}")
+                            }
+                            relayDataSource.acknowledgeAndRemoveMessage(
+                                messageId = dto.messageId,
+                                senderId = dto.senderId,
+                                receiverId = userId
+                            )
+                            return@collect
+                        }
+
                         val entity = MessageEntity(
                             messageId = dto.messageId,
                             conversationId = dto.conversationId,
@@ -365,6 +422,15 @@ class ChatRepositoryImpl @Inject constructor(
                     }
                 }
                 activeJobs.add(ackJob)
+
+                // 3. Listen for conversation accepted realtime events
+                val acceptJob = launch(dispatchers.io) {
+                    relayDataSource.observeConversationAccepted(userId).collect { acceptDto ->
+                        Log.d(TAG, "Realtime conversation accepted received for ${acceptDto.conversationId}")
+                        handleConversationAccepted(acceptDto)
+                    }
+                }
+                activeJobs.add(acceptJob)
             }
         }
 
@@ -429,7 +495,7 @@ class ChatRepositoryImpl @Inject constructor(
             lastMessage = null,
             lastMessageTimestamp = System.currentTimeMillis(),
             unreadCount = 0,
-            isAccepted = true
+            isAccepted = false
         )
         conversationDao.upsertConversation(newConv)
         newConv.toDomain()
@@ -449,20 +515,91 @@ class ChatRepositoryImpl @Inject constructor(
     override suspend fun acceptConversation(conversationId: String): Result<Unit> = withContext(dispatchers.io) {
         runCatching {
             conversationDao.acceptConversation(conversationId)
-            val conv = conversationDao.getConversationById(conversationId)
-            if (conv != null) {
-                val remote = authDataSource.fetchRemoteProfile(conv.participantId)
-                if (remote != null) {
-                    conversationDao.updateParticipantDetails(
-                        conversationId = conversationId,
-                        name = remote.displayName,
-                        username = remote.username,
-                        avatarUrl = remote.avatarUrl
-                    )
-                }
+            val conv = conversationDao.getConversationById(conversationId) ?: return@runCatching Unit
+
+            // 1. Fetch partner's profile and save partner's avatar to local mobile storage
+            val remotePartner = authDataSource.fetchRemoteProfile(conv.participantId)
+            val partnerAvatarSource = remotePartner?.avatarUrl ?: conv.participantAvatarUrl
+            val localPartnerAvatar = if (!partnerAvatarSource.isNullOrBlank()) {
+                localContactsSource.saveUserProfilePicture(conv.participantId, partnerAvatarSource)
+            } else {
+                null
             }
+
+            val partnerName = remotePartner?.displayName?.ifBlank { conv.participantName } ?: conv.participantName
+            val partnerUsername = remotePartner?.username?.ifBlank { conv.participantUsername } ?: conv.participantUsername
+
+            conversationDao.updateParticipantDetails(
+                conversationId = conversationId,
+                name = partnerName,
+                username = partnerUsername,
+                avatarUrl = localPartnerAvatar ?: partnerAvatarSource
+            )
+
+            // 2. Prepare current user's (acceptor's) details & transferrable avatar to travel to partner's mobile
+            val currentUser = authDataSource.getCurrentUser()
+            val acceptorId = currentUser?.id ?: auth.currentUserOrNull()?.id.orEmpty()
+            val acceptorName = currentUser?.userMetadata?.get("display_name")?.jsonPrimitive?.content
+                ?: currentUser?.userMetadata?.get("full_name")?.jsonPrimitive?.content
+                ?: "User"
+            val acceptorUsername = currentUser?.userMetadata?.get("username")?.jsonPrimitive?.content.orEmpty()
+            val rawAcceptorAvatar = currentUser?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+            val transferrableAvatar = resolveTransferrableAvatar(rawAcceptorAvatar)
+
+            // 3. Transmit acceptance event to partner (realtime broadcast + relay table)
+            val acceptDto = ConversationAcceptedDto(
+                conversationId = conversationId,
+                acceptorId = acceptorId,
+                acceptorName = acceptorName,
+                acceptorUsername = acceptorUsername,
+                acceptorAvatarUrl = transferrableAvatar
+            )
+            relayDataSource.sendConversationAccepted(acceptDto, conv.participantId)
+            Log.d(TAG, "Sent conversation accepted event to partner ${conv.participantId}")
             Unit
         }
+    }
+
+    private suspend fun handleConversationAccepted(dto: ConversationAcceptedDto) {
+        conversationDao.acceptConversation(dto.conversationId)
+        val conv = conversationDao.getConversationById(dto.conversationId)
+            ?: conversationDao.getConversationByParticipant(dto.acceptorId)
+
+        // Save acceptor's avatar into local mobile data storage
+        val rawAvatar = dto.acceptorAvatarUrl
+        val localAvatarUri = if (!rawAvatar.isNullOrBlank()) {
+            localContactsSource.saveUserProfilePicture(dto.acceptorId, rawAvatar)
+        } else {
+            null
+        }
+
+        val name = dto.acceptorName.ifBlank { conv?.participantName ?: "User" }
+        val username = dto.acceptorUsername.ifBlank { conv?.participantUsername.orEmpty() }
+
+        if (conv != null) {
+            conversationDao.updateParticipantDetails(
+                conversationId = conv.conversationId,
+                name = name,
+                username = username,
+                avatarUrl = localAvatarUri ?: dto.acceptorAvatarUrl
+            )
+            conversationDao.acceptConversation(conv.conversationId)
+        } else {
+            conversationDao.upsertConversation(
+                ConversationEntity(
+                    conversationId = dto.conversationId,
+                    participantId = dto.acceptorId,
+                    participantName = name,
+                    participantUsername = username,
+                    participantAvatarUrl = localAvatarUri ?: dto.acceptorAvatarUrl,
+                    lastMessage = null,
+                    lastMessageTimestamp = System.currentTimeMillis(),
+                    unreadCount = 0,
+                    isAccepted = true
+                )
+            )
+        }
+        Log.d(TAG, "Conversation ${dto.conversationId} accepted and partner avatar stored locally: $localAvatarUri")
     }
 
     override suspend fun markConversationAsRead(conversationId: String): Result<Unit> = withContext(dispatchers.io) {

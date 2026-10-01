@@ -274,7 +274,7 @@ private fun ChatScreenContent(
                     .border(1.dp, colors.badgeBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (!uiState.participantAvatarUrl.isNullOrBlank()) {
+                if (uiState.isAccepted && !uiState.participantAvatarUrl.isNullOrBlank()) {
                     val rawAvatar = uiState.participantAvatarUrl!!
 
                     if (rawAvatar.startsWith("preset:")) {
@@ -407,6 +407,7 @@ private fun ChatScreenContent(
                         about = uiState.participantAbout,
                         avatarUrl = uiState.participantAvatarUrl,
                         isProfileShared = uiState.isProfileShared,
+                        isAccepted = uiState.isAccepted,
                         modifier = Modifier.padding(bottom = if (uiState.messages.isEmpty()) 0.dp else 16.dp)
                     )
                 }
@@ -842,6 +843,7 @@ private fun SquareProfileHeaderCard(
     about: String,
     avatarUrl: String?,
     isProfileShared: Boolean,
+    isAccepted: Boolean,
     modifier: Modifier = Modifier
 ) {
     val colors = NuraTheme.colors
@@ -869,7 +871,7 @@ private fun SquareProfileHeaderCard(
                     .border(2.dp, colors.badgeBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (!avatarUrl.isNullOrBlank()) {
+                if (isAccepted && !avatarUrl.isNullOrBlank()) {
 
 
                     if (avatarUrl.startsWith("preset:")) {

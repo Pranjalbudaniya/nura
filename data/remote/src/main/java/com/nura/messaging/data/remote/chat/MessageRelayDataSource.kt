@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,6 +34,7 @@ class MessageRelayDataSource @Inject constructor(
         private const val TABLE_NAME = "messages_relay"
         private const val EVENT_NEW_MESSAGE = "new_message"
         private const val EVENT_DELIVERY_ACK = "delivery_ack"
+        private const val EVENT_CONVERSATION_ACCEPTED = "conversation_accepted"
     }
 
     private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
@@ -223,6 +226,88 @@ class MessageRelayDataSource @Inject constructor(
         awaitClose {
             Log.d(TAG, "Closing observeDeliveryAcks for $topic")
             ackJob.cancel()
+        }
+    }.flowOn(dispatchers.io)
+
+    suspend fun sendConversationAccepted(
+        dto: ConversationAcceptedDto,
+        partnerId: String
+    ): Result<Unit> = withContext(dispatchers.io) {
+        var broadcastSuccess = false
+        var postgrestSuccess = false
+        var lastError: Throwable? = null
+
+        // 1. Broadcast to partner's inbox topic
+        try {
+            val inboxTopic = "nura_inbox_$partnerId"
+            val channel = getOrJoinChannel(inboxTopic)
+            channel.broadcast(event = EVENT_CONVERSATION_ACCEPTED, message = dto)
+            Log.d(TAG, "Broadcast conversation accepted for ${dto.conversationId} to $inboxTopic")
+            broadcastSuccess = true
+        } catch (e: Exception) {
+            Log.w(TAG, "Broadcast conversation accepted to inbox failed: ${e.message}", e)
+            lastError = e
+        }
+
+        // 2. Also broadcast to conversation topic if available
+        if (dto.conversationId.isNotBlank()) {
+            try {
+                val convTopic = "nura_conv_${dto.conversationId}"
+                val channel = getOrJoinChannel(convTopic)
+                channel.broadcast(event = EVENT_CONVERSATION_ACCEPTED, message = dto)
+                Log.d(TAG, "Broadcast conversation accepted to $convTopic")
+                broadcastSuccess = true
+            } catch (e: Exception) {
+                Log.w(TAG, "Broadcast conversation accepted to conv topic failed: ${e.message}")
+            }
+        }
+
+        // 3. Persistent Supabase table insert (for offline pickup)
+        try {
+            val payloadJson = json.encodeToString(ConversationAcceptedDto.serializer(), dto)
+            val systemMessage = MessageRelayDto(
+                messageId = UUID.randomUUID().toString(),
+                senderId = dto.acceptorId,
+                receiverId = partnerId,
+                conversationId = dto.conversationId,
+                content = payloadJson,
+                messageType = "system_accept",
+                createdAt = System.currentTimeMillis()
+            )
+            postgrest[TABLE_NAME].insert(systemMessage.toTableDto())
+            Log.d(TAG, "system_accept message inserted into $TABLE_NAME table")
+            postgrestSuccess = true
+        } catch (e: Exception) {
+            Log.w(TAG, "PostgREST insert for system_accept failed: ${e.message}")
+            if (lastError == null) lastError = e
+        }
+
+        if (broadcastSuccess || postgrestSuccess) {
+            Result.success(Unit)
+        } else {
+            Result.failure(lastError ?: RuntimeException("Failed to send conversation accepted event"))
+        }
+    }
+
+    fun observeConversationAccepted(userId: String): Flow<ConversationAcceptedDto> = callbackFlow {
+        val topic = "nura_inbox_$userId"
+        Log.d(TAG, "Starting observeConversationAccepted for $topic")
+        val channel = getOrJoinChannel(topic)
+
+        val acceptJob = launch {
+            try {
+                channel.broadcastFlow<ConversationAcceptedDto>(EVENT_CONVERSATION_ACCEPTED).collect { dto ->
+                    Log.d(TAG, "Realtime conversation accepted received for ${dto.conversationId}")
+                    trySend(dto)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in conversation accepted broadcastFlow for $topic: ${e.message}", e)
+            }
+        }
+
+        awaitClose {
+            Log.d(TAG, "Closing observeConversationAccepted for $topic")
+            acceptJob.cancel()
         }
     }.flowOn(dispatchers.io)
 }
