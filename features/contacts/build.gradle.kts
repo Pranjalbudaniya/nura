@@ -35,6 +35,7 @@ dependencies {
     implementation(project(":domain:entities"))
     implementation(project(":domain:usecases"))
     implementation(project(":core:common"))
+    implementation(project(":features:auth"))
 
     implementation(libs.androidx.core.ktx)
     implementation(platform(libs.androidx.compose.bom))
@@ -53,8 +54,12 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.coil.compose)
+    implementation(libs.zxing.core)
 
+    testImplementation(project(":domain:repositories"))
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
     debugImplementation(libs.androidx.compose.ui.tooling)

@@ -27,17 +27,25 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
+    implementation(project(":core:network"))
     implementation(project(":domain:entities"))
     implementation(project(":domain:repositories"))
     implementation(project(":data:dto"))
     implementation(project(":data:mappers"))
     implementation(project(":data:remote"))
     implementation(project(":data:local"))
+    implementation(project(":core:database"))
 
+    implementation(libs.okhttp.core)
+
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
 
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

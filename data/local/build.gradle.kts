@@ -32,6 +32,9 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
 
+    implementation(project(":domain:entities"))
+    implementation(libs.kotlinx.serialization.json)
+
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
 

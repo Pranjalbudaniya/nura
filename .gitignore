@@ -1,5 +1,6 @@
 *.iml
 .gradle/
+.kotlin/
 local.properties
 .idea/
 .DS_Store
@@ -22,3 +23,7 @@ gemini.md
 gemin.md
 AGENTS.md
 agents.md
+
+# Documentation and design assets
+stitch_source/
+docs/

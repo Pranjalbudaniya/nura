@@ -1,0 +1,153 @@
+package com.nura.messaging.domain.usecases.chat
+
+import com.nura.messaging.domain.entities.chat.ChatConversation
+import com.nura.messaging.domain.entities.chat.ChatMessage
+import com.nura.messaging.domain.entities.chat.MessageStatus
+import com.nura.messaging.domain.repositories.chat.ChatRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+class ChatUseCasesTest {
+
+    private lateinit var fakeRepository: FakeChatRepository
+    private lateinit var sendMessageUseCase: SendMessageUseCase
+    private lateinit var getMessagesUseCase: GetMessagesUseCase
+    private lateinit var getConversationsUseCase: GetConversationsUseCase
+    private lateinit var syncPendingMessagesUseCase: SyncPendingMessagesUseCase
+    private lateinit var getOrCreateConversationUseCase: GetOrCreateConversationUseCase
+
+    @Before
+    fun setUp() {
+        fakeRepository = FakeChatRepository()
+        sendMessageUseCase = SendMessageUseCase(fakeRepository)
+        getMessagesUseCase = GetMessagesUseCase(fakeRepository)
+        getConversationsUseCase = GetConversationsUseCase(fakeRepository)
+        syncPendingMessagesUseCase = SyncPendingMessagesUseCase(fakeRepository)
+        getOrCreateConversationUseCase = GetOrCreateConversationUseCase(fakeRepository)
+    }
+
+    @Test
+    fun `sendMessageUseCase sends message with non-empty content successfully`() = runTest {
+        val result = sendMessageUseCase("conv_1", "user_2", "Hello World")
+        assertTrue(result.isSuccess)
+        val msg = result.getOrNull()
+        assertEquals("Hello World", msg?.content)
+        assertEquals("conv_1", msg?.conversationId)
+        assertEquals(MessageStatus.SENT, msg?.status)
+    }
+
+    @Test
+    fun `sendMessageUseCase fails when content is blank`() = runTest {
+        val result = sendMessageUseCase("conv_1", "user_2", "   ")
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `getMessagesUseCase returns message list flow`() = runTest {
+        val messages = getMessagesUseCase("conv_1").first()
+        assertEquals(1, messages.size)
+        assertEquals("Initial message", messages[0].content)
+    }
+
+    @Test
+    fun `getConversationsUseCase returns conversation list flow`() = runTest {
+        val conversations = getConversationsUseCase().first()
+        assertEquals(1, conversations.size)
+        assertEquals("Alice", conversations[0].participantName)
+    }
+
+    @Test
+    fun `getOrCreateConversationUseCase returns conversation`() = runTest {
+        val conv = getOrCreateConversationUseCase("user_3", "Bob", "bob", null)
+        assertEquals("user_3", conv.participantId)
+        assertEquals("Bob", conv.participantName)
+    }
+
+    private class FakeChatRepository : ChatRepository {
+        val messagesList = mutableListOf(
+            ChatMessage(
+                id = "m1",
+                conversationId = "conv_1",
+                senderId = "user_1",
+                receiverId = "user_2",
+                content = "Initial message",
+                status = MessageStatus.DELIVERED,
+                isOutgoing = false
+            )
+        )
+
+        val conversationsList = mutableListOf(
+            ChatConversation(
+                conversationId = "conv_1",
+                participantId = "user_2",
+                participantName = "Alice",
+                participantUsername = "alice",
+                lastMessage = "Initial message",
+                lastMessageTimestamp = System.currentTimeMillis()
+            )
+        )
+
+        override fun getMessages(conversationId: String): Flow<List<ChatMessage>> {
+            return flowOf(messagesList.filter { it.conversationId == conversationId })
+        }
+
+        override fun getConversations(): Flow<List<ChatConversation>> {
+            return flowOf(conversationsList)
+        }
+
+        override suspend fun sendMessage(
+            conversationId: String,
+            receiverId: String,
+            content: String
+        ): Result<ChatMessage> {
+            val msg = ChatMessage(
+                id = "m_${System.currentTimeMillis()}",
+                conversationId = conversationId,
+                senderId = "user_1",
+                receiverId = receiverId,
+                content = content,
+                status = MessageStatus.SENT,
+                isOutgoing = true
+            )
+            messagesList.add(msg)
+            return Result.success(msg)
+        }
+
+        override suspend fun retrySendMessage(messageId: String): Result<Unit> {
+            return Result.success(Unit)
+        }
+
+        override suspend fun syncPendingMessages(): Result<Unit> {
+            return Result.success(Unit)
+        }
+
+        override fun observeIncomingMessages(): Flow<ChatMessage> {
+            return flowOf()
+        }
+
+        override suspend fun getOrCreateConversation(
+            participantId: String,
+            name: String,
+            username: String,
+            avatarUrl: String?
+        ): ChatConversation {
+            val existing = conversationsList.find { it.participantId == participantId }
+            if (existing != null) return existing
+            val newConv = ChatConversation(
+                conversationId = "conv_$participantId",
+                participantId = participantId,
+                participantName = name,
+                participantUsername = username,
+                participantAvatarUrl = avatarUrl
+            )
+            conversationsList.add(newConv)
+            return newConv
+        }
+    }
+}

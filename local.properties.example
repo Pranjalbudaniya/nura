@@ -1,0 +1,7 @@
+## Location of the Android SDK. This is only used by Gradle.
+# sdk.dir=C\:\\Users\\Asus\\AppData\\Local\\Android\\Sdk
+
+## Supabase Credentials (Required for Authentication)
+## These are kept locally in local.properties and are NEVER committed to git.
+supabase.url=https://your-project-id.supabase.co
+supabase.anon.key=your-anon-public-key
