@@ -97,3 +97,19 @@ class GetParticipantProfileUseCase @Inject constructor(
         return repository.getParticipantProfile(participantId)
     }
 }
+
+class MarkConversationAsReadUseCase @Inject constructor(
+    private val repository: ChatRepository
+) {
+    suspend operator fun invoke(conversationId: String): Result<Unit> {
+        return repository.markConversationAsRead(conversationId)
+    }
+}
+
+class SetActiveConversationUseCase @Inject constructor(
+    private val notificationService: com.nura.messaging.domain.repositories.notification.NotificationService
+) {
+    operator fun invoke(conversationId: String?) {
+        notificationService.setActiveConversation(conversationId)
+    }
+}

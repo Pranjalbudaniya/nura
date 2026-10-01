@@ -31,11 +31,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+import com.nura.messaging.domain.usecases.chat.MarkConversationAsReadUseCase
+import com.nura.messaging.domain.usecases.chat.SetActiveConversationUseCase
+import com.nura.messaging.domain.repositories.notification.NotificationService
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var fakeRepository: FakeChatRepository
+    private lateinit var fakeNotificationService: FakeNotificationService
     private lateinit var viewModel: ChatViewModel
 
     private val testDispatcherProvider = object : DispatcherProvider {
@@ -49,6 +54,7 @@ class ChatViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeRepository = FakeChatRepository()
+        fakeNotificationService = FakeNotificationService()
         viewModel = ChatViewModel(
             getMessagesUseCase = GetMessagesUseCase(fakeRepository),
             getOrCreateConversationUseCase = GetOrCreateConversationUseCase(fakeRepository),
@@ -59,6 +65,8 @@ class ChatViewModelTest {
             deleteConversationUseCase = DeleteConversationUseCase(fakeRepository),
             acceptConversationUseCase = AcceptConversationUseCase(fakeRepository),
             getParticipantProfileUseCase = GetParticipantProfileUseCase(fakeRepository),
+            markConversationAsReadUseCase = MarkConversationAsReadUseCase(fakeRepository),
+            setActiveConversationUseCase = SetActiveConversationUseCase(fakeNotificationService),
             dispatchers = testDispatcherProvider
         )
     }
@@ -79,6 +87,7 @@ class ChatViewModelTest {
         assertEquals("Maya Lin", state.participantName)
         assertEquals(1, state.messages.size)
         assertEquals("Hey there!", state.messages[0].content)
+        assertEquals("conv_123", fakeNotificationService.currentActiveConversationId)
     }
 
     @Test
@@ -177,5 +186,26 @@ class ChatViewModelTest {
         override suspend fun acceptConversation(conversationId: String): Result<Unit> {
             return Result.success(Unit)
         }
+
+        override suspend fun markConversationAsRead(conversationId: String): Result<Unit> {
+            return Result.success(Unit)
+        }
+    }
+
+    private class FakeNotificationService : NotificationService {
+        var currentActiveConversationId: String? = null
+
+        override fun showMessageNotification(
+            title: String,
+            content: String,
+            conversationId: String,
+            senderId: String
+        ) {}
+
+        override fun setActiveConversation(conversationId: String?) {
+            currentActiveConversationId = conversationId
+        }
+
+        override fun cancelConversationNotifications(conversationId: String) {}
     }
 }

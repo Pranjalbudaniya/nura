@@ -25,9 +25,18 @@ interface ConversationDao {
     @Query("UPDATE conversations SET lastMessage = :lastMessage, lastMessageTimestamp = :timestamp WHERE conversationId = :conversationId")
     suspend fun updateLastMessage(conversationId: String, lastMessage: String, timestamp: Long)
 
+    @Query("UPDATE conversations SET lastMessage = :lastMessage, lastMessageTimestamp = :timestamp, unreadCount = unreadCount + 1 WHERE conversationId = :conversationId")
+    suspend fun updateLastMessageWithUnread(conversationId: String, lastMessage: String, timestamp: Long)
+
     @Query("UPDATE conversations SET participantName = :name, participantUsername = :username, participantAvatarUrl = :avatarUrl WHERE conversationId = :conversationId")
     suspend fun updateParticipantDetails(conversationId: String, name: String, username: String, avatarUrl: String?)
 
     @Query("DELETE FROM conversations WHERE conversationId = :conversationId")
     suspend fun deleteConversation(conversationId: String)
+
+    @Query("UPDATE conversations SET unreadCount = 0 WHERE conversationId = :conversationId")
+    suspend fun markAsRead(conversationId: String)
+
+    @Query("UPDATE conversations SET unreadCount = 0 WHERE conversationId = :conversationId")
+    suspend fun acceptConversation(conversationId: String)
 }

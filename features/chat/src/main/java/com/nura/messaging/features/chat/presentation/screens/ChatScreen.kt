@@ -285,85 +285,85 @@ private fun ChatScreenContent(
             }
         }
 
-        // Message Request Accept/Reject Banner
+        // Message Request Accept/Reject Banner or Bottom Input Bar
         if (uiState.isRequest && !uiState.isAccepted) {
             MessageRequestBanner(
                 participantName = uiState.participantName,
                 onAccept = viewModel::acceptRequest,
                 onReject = { viewModel.rejectRequest(onRejected = onBack) }
             )
-        }
-
-        // Bottom Input Bar (with stabilized height to prevent shrinking on typing first letter)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
+        } else {
+            // Bottom Input Bar (with stabilized height to prevent shrinking on typing first letter)
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(colors.inputBackground)
-                    .border(1.dp, colors.inputBorder, RoundedCornerShape(24.dp))
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                contentAlignment = Alignment.CenterStart
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                BasicTextField(
-                    value = uiState.inputText,
-                    onValueChange = viewModel::onInputTextChanged,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        fontFamily = PlusJakartaSansFamily,
-                        fontSize = 15.sp,
-                        color = colors.brandLogoText,
-                        lineHeight = 20.sp
-                    ),
-                    cursorBrush = SolidColor(colors.terracottaAccent),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { innerTextField ->
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            if (uiState.inputText.isEmpty()) {
-                                Text(
-                                    text = "Message...",
-                                    fontFamily = PlusJakartaSansFamily,
-                                    fontSize = 15.sp,
-                                    color = colors.subtitleText,
-                                    lineHeight = 20.sp
-                                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(colors.inputBackground)
+                        .border(1.dp, colors.inputBorder, RoundedCornerShape(24.dp))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    BasicTextField(
+                        value = uiState.inputText,
+                        onValueChange = viewModel::onInputTextChanged,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 15.sp,
+                            color = colors.brandLogoText,
+                            lineHeight = 20.sp
+                        ),
+                        cursorBrush = SolidColor(colors.terracottaAccent),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (uiState.inputText.isEmpty()) {
+                                    Text(
+                                        text = "Message...",
+                                        fontFamily = PlusJakartaSansFamily,
+                                        fontSize = 15.sp,
+                                        color = colors.subtitleText,
+                                        lineHeight = 20.sp
+                                    )
+                                }
+                                innerTextField()
                             }
-                            innerTextField()
                         }
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Send Button
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (uiState.inputText.isNotBlank()) colors.terracottaAccent else colors.badgeBackground
                     )
-                    .clickable(
-                        enabled = uiState.inputText.isNotBlank() && !uiState.isSending,
-                        onClick = viewModel::sendMessage
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = if (uiState.inputText.isNotBlank()) Color.White else colors.subtitleText,
-                    modifier = Modifier.size(20.dp)
-                )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Send Button
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (uiState.inputText.isNotBlank()) colors.terracottaAccent else colors.badgeBackground
+                        )
+                        .clickable(
+                            enabled = uiState.inputText.isNotBlank() && !uiState.isSending,
+                            onClick = viewModel::sendMessage
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        tint = if (uiState.inputText.isNotBlank()) Color.White else colors.subtitleText,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
@@ -590,11 +590,11 @@ private fun MessageBubble(
                     )
                 )
                 .background(
-                    if (message.isOutgoing) colors.cardDarkBubble else colors.badgeBackground
+                    if (message.isOutgoing) colors.cardDarkBubble else colors.terracottaAccent
                 )
                 .border(
                     width = 1.dp,
-                    color = colors.badgeBorder,
+                    color = if (message.isOutgoing) colors.badgeBorder else colors.terracottaAccent,
                     shape = RoundedCornerShape(
                         topStart = 16.dp,
                         topEnd = 16.dp,
@@ -609,7 +609,7 @@ private fun MessageBubble(
                 fontFamily = PlusJakartaSansFamily,
                 fontWeight = FontWeight.Normal,
                 fontSize = 15.sp,
-                color = colors.brandLogoText,
+                color = if (message.isOutgoing) colors.brandLogoText else Color.White,
                 lineHeight = 20.sp
             )
 
@@ -624,7 +624,7 @@ private fun MessageBubble(
                     text = formattedTime,
                     fontFamily = PlusJakartaSansFamily,
                     fontSize = 10.sp,
-                    color = colors.subtitleText
+                    color = if (message.isOutgoing) colors.subtitleText else Color.White.copy(alpha = 0.8f)
                 )
 
                 if (message.isOutgoing) {

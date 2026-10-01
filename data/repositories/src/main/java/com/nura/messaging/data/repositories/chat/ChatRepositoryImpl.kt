@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.nura.messaging.data.remote.auth.SupabaseAuthDataSource
+import com.nura.messaging.domain.repositories.notification.NotificationService
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,6 +35,7 @@ class ChatRepositoryImpl @Inject constructor(
     private val relayDataSource: MessageRelayDataSource,
     private val localContactsSource: ConnectionsLocalDataSource,
     private val authDataSource: SupabaseAuthDataSource,
+    private val notificationService: NotificationService,
     private val auth: Auth,
     private val dispatchers: DispatcherProvider
 ) : ChatRepository {
@@ -330,6 +332,7 @@ class ChatRepositoryImpl @Inject constructor(
 
     override suspend fun acceptConversation(conversationId: String): Result<Unit> = withContext(dispatchers.io) {
         runCatching {
+            conversationDao.acceptConversation(conversationId)
             val conv = conversationDao.getConversationById(conversationId)
             if (conv != null) {
                 val remote = authDataSource.fetchRemoteProfile(conv.participantId)
@@ -346,15 +349,25 @@ class ChatRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun markConversationAsRead(conversationId: String): Result<Unit> = withContext(dispatchers.io) {
+        runCatching {
+            conversationDao.markAsRead(conversationId)
+            Unit
+        }
+    }
+
     private suspend fun updateConversationOnIncoming(dto: MessageRelayDto) {
+        val currentUserId = auth.currentUserOrNull()?.id.orEmpty()
         val existingConv = conversationDao.getConversationById(dto.conversationId)
             ?: conversationDao.getConversationByParticipant(dto.senderId)
 
         if (existingConv != null) {
-            conversationDao.updateLastMessage(existingConv.conversationId, dto.content, dto.createdAt)
+            conversationDao.updateLastMessageWithUnread(existingConv.conversationId, dto.content, dto.createdAt)
+            var senderDisplayName = existingConv.participantName
             if (existingConv.participantName.startsWith("User ") || existingConv.participantAvatarUrl.isNullOrBlank()) {
                 val remote = authDataSource.fetchRemoteProfile(dto.senderId)
                 if (remote != null && remote.displayName.isNotBlank()) {
+                    senderDisplayName = remote.displayName
                     conversationDao.upsertConversation(
                         existingConv.copy(
                             participantName = remote.displayName,
@@ -366,8 +379,16 @@ class ChatRepositoryImpl @Inject constructor(
                     )
                 }
             }
+
+            if (dto.senderId != currentUserId) {
+                notificationService.showMessageNotification(
+                    title = senderDisplayName,
+                    content = dto.content,
+                    conversationId = existingConv.conversationId,
+                    senderId = dto.senderId
+                )
+            }
         } else {
-            val currentUserId = auth.currentUserOrNull()?.id.orEmpty()
             val contact = localContactsSource.getRecentConnections(currentUserId)
                 .find { it.id == dto.senderId }
 
@@ -393,6 +414,15 @@ class ChatRepositoryImpl @Inject constructor(
                 unreadCount = 1
             )
             conversationDao.upsertConversation(newConv)
+
+            if (dto.senderId != currentUserId) {
+                notificationService.showMessageNotification(
+                    title = displayName,
+                    content = dto.content,
+                    conversationId = dto.conversationId,
+                    senderId = dto.senderId
+                )
+            }
         }
     }
 }

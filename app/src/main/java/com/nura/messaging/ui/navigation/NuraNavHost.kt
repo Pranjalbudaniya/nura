@@ -410,16 +410,28 @@ fun NuraNavHost(
 
         composable<NavRoute.Chat>(
             enterTransition = {
-                slideIntoContainer(
-                    AnimatedContentTransitionScope.SlideDirection.Left,
-                    animationSpec = tween(300)
-                )
+                androidx.compose.animation.scaleIn(
+                    initialScale = 0.85f,
+                    animationSpec = tween(300, easing = androidx.compose.animation.core.EaseOutCubic)
+                ) + androidx.compose.animation.fadeIn(animationSpec = tween(300))
             },
             exitTransition = {
-                slideOutOfContainer(
-                    AnimatedContentTransitionScope.SlideDirection.Right,
-                    animationSpec = tween(300)
-                )
+                androidx.compose.animation.scaleOut(
+                    targetScale = 0.85f,
+                    animationSpec = tween(250, easing = androidx.compose.animation.core.EaseInCubic)
+                ) + androidx.compose.animation.fadeOut(animationSpec = tween(250))
+            },
+            popEnterTransition = {
+                androidx.compose.animation.scaleIn(
+                    initialScale = 0.85f,
+                    animationSpec = tween(300, easing = androidx.compose.animation.core.EaseOutCubic)
+                ) + androidx.compose.animation.fadeIn(animationSpec = tween(300))
+            },
+            popExitTransition = {
+                androidx.compose.animation.scaleOut(
+                    targetScale = 0.85f,
+                    animationSpec = tween(250, easing = androidx.compose.animation.core.EaseInCubic)
+                ) + androidx.compose.animation.fadeOut(animationSpec = tween(250))
             }
         ) { backStackEntry ->
             val chatRoute = backStackEntry.toRoute<NavRoute.Chat>()

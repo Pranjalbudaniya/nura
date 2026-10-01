@@ -21,15 +21,21 @@ class ChatUseCasesTest {
     private lateinit var getConversationsUseCase: GetConversationsUseCase
     private lateinit var syncPendingMessagesUseCase: SyncPendingMessagesUseCase
     private lateinit var getOrCreateConversationUseCase: GetOrCreateConversationUseCase
+    private lateinit var markConversationAsReadUseCase: MarkConversationAsReadUseCase
+    private lateinit var setActiveConversationUseCase: SetActiveConversationUseCase
+    private lateinit var fakeNotificationService: FakeNotificationService
 
     @Before
     fun setUp() {
         fakeRepository = FakeChatRepository()
+        fakeNotificationService = FakeNotificationService()
         sendMessageUseCase = SendMessageUseCase(fakeRepository)
         getMessagesUseCase = GetMessagesUseCase(fakeRepository)
         getConversationsUseCase = GetConversationsUseCase(fakeRepository)
         syncPendingMessagesUseCase = SyncPendingMessagesUseCase(fakeRepository)
         getOrCreateConversationUseCase = GetOrCreateConversationUseCase(fakeRepository)
+        markConversationAsReadUseCase = MarkConversationAsReadUseCase(fakeRepository)
+        setActiveConversationUseCase = SetActiveConversationUseCase(fakeNotificationService)
     }
 
     @Test
@@ -67,6 +73,20 @@ class ChatUseCasesTest {
         val conv = getOrCreateConversationUseCase("user_3", "Bob", "bob", null)
         assertEquals("user_3", conv.participantId)
         assertEquals("Bob", conv.participantName)
+    }
+
+    @Test
+    fun `markConversationAsReadUseCase marks conversation as read successfully`() = runTest {
+        val result = markConversationAsReadUseCase("conv_1")
+        assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun `setActiveConversationUseCase updates notification service`() {
+        setActiveConversationUseCase("conv_active_123")
+        assertEquals("conv_active_123", fakeNotificationService.currentActiveId)
+        setActiveConversationUseCase(null)
+        assertEquals(null, fakeNotificationService.currentActiveId)
     }
 
     private class FakeChatRepository : ChatRepository {
@@ -169,5 +189,26 @@ class ChatUseCasesTest {
         override suspend fun acceptConversation(conversationId: String): Result<Unit> {
             return Result.success(Unit)
         }
+
+        override suspend fun markConversationAsRead(conversationId: String): Result<Unit> {
+            return Result.success(Unit)
+        }
+    }
+
+    private class FakeNotificationService : com.nura.messaging.domain.repositories.notification.NotificationService {
+        var currentActiveId: String? = null
+
+        override fun showMessageNotification(
+            title: String,
+            content: String,
+            conversationId: String,
+            senderId: String
+        ) {}
+
+        override fun setActiveConversation(conversationId: String?) {
+            currentActiveId = conversationId
+        }
+
+        override fun cancelConversationNotifications(conversationId: String) {}
     }
 }

@@ -27,6 +27,7 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
+    implementation(project(":domain:repositories"))
 
     implementation(libs.androidx.core.ktx)
 

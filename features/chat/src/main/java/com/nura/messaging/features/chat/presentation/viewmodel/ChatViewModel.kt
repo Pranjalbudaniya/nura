@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 import com.nura.messaging.domain.usecases.chat.AcceptConversationUseCase
 import com.nura.messaging.domain.usecases.chat.DeleteConversationUseCase
 import com.nura.messaging.domain.usecases.chat.GetParticipantProfileUseCase
+import com.nura.messaging.domain.usecases.chat.MarkConversationAsReadUseCase
+import com.nura.messaging.domain.usecases.chat.SetActiveConversationUseCase
 import javax.inject.Inject
 
 @HiltViewModel
@@ -33,6 +35,8 @@ class ChatViewModel @Inject constructor(
     private val deleteConversationUseCase: DeleteConversationUseCase,
     private val acceptConversationUseCase: AcceptConversationUseCase,
     private val getParticipantProfileUseCase: GetParticipantProfileUseCase,
+    private val markConversationAsReadUseCase: MarkConversationAsReadUseCase,
+    private val setActiveConversationUseCase: SetActiveConversationUseCase,
     private val dispatchers: DispatcherProvider
 ) : ViewModel() {
 
@@ -63,6 +67,8 @@ class ChatViewModel @Inject constructor(
                 isLoading = true
             )
         }
+
+        setActiveConversationUseCase(conversationId)
 
         // Fetch fresh remote profile from Supabase to ensure accurate real name, about, and avatar
         viewModelScope.launch(dispatchers.io) {
@@ -106,6 +112,11 @@ class ChatViewModel @Inject constructor(
             }
         }
 
+        // Mark conversation as read immediately on open
+        viewModelScope.launch(dispatchers.io) {
+            markConversationAsReadUseCase(conversationId)
+        }
+
         // Pull any undelivered messages from Supabase relay
         viewModelScope.launch(dispatchers.io) {
             syncPendingMessagesUseCase()
@@ -114,8 +125,10 @@ class ChatViewModel @Inject constructor(
         // Listen for realtime incoming messages
         realtimeJob?.cancel()
         realtimeJob = viewModelScope.launch(dispatchers.io) {
-            observeIncomingMessagesUseCase().collect {
-                // Incoming messages are written to Room and automatically emitted to messagesJob
+            observeIncomingMessagesUseCase().collect { msg ->
+                if (msg.conversationId == _uiState.value.conversationId) {
+                    markConversationAsReadUseCase(msg.conversationId)
+                }
             }
         }
     }
@@ -140,6 +153,8 @@ class ChatViewModel @Inject constructor(
         }
 
         viewModelScope.launch(dispatchers.io) {
+            acceptConversationUseCase(current.conversationId)
+            markConversationAsReadUseCase(current.conversationId)
             val result = sendMessageUseCase(
                 conversationId = current.conversationId,
                 receiverId = current.participantId,
@@ -157,6 +172,7 @@ class ChatViewModel @Inject constructor(
         _uiState.update { it.copy(isAccepted = true, isProfileShared = true) }
         viewModelScope.launch(dispatchers.io) {
             acceptConversationUseCase(convId)
+            markConversationAsReadUseCase(convId)
         }
     }
 
@@ -178,5 +194,10 @@ class ChatViewModel @Inject constructor(
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        setActiveConversationUseCase(null)
     }
 }

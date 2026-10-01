@@ -15,4 +15,5 @@ interface ChatRepository {
     suspend fun getParticipantProfile(participantId: String): com.nura.messaging.domain.entities.auth.RemoteUserProfile?
     suspend fun deleteConversation(conversationId: String): Result<Unit>
     suspend fun acceptConversation(conversationId: String): Result<Unit>
+    suspend fun markConversationAsRead(conversationId: String): Result<Unit>
 }
