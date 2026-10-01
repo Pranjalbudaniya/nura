@@ -21,7 +21,8 @@ data class ConversationEntity(
     val participantAvatarUrl: String? = null,
     val lastMessage: String? = null,
     val lastMessageTimestamp: Long = 0L,
-    val unreadCount: Int = 0
+    val unreadCount: Int = 0,
+    val isAccepted: Boolean = false
 ) {
     fun toDomain(): ChatConversation {
         return ChatConversation(
@@ -32,7 +33,8 @@ data class ConversationEntity(
             participantAvatarUrl = participantAvatarUrl,
             lastMessage = lastMessage,
             lastMessageTimestamp = lastMessageTimestamp,
-            unreadCount = unreadCount
+            unreadCount = unreadCount,
+            isAccepted = isAccepted
         )
     }
 
@@ -46,7 +48,8 @@ data class ConversationEntity(
                 participantAvatarUrl = domain.participantAvatarUrl,
                 lastMessage = domain.lastMessage,
                 lastMessageTimestamp = domain.lastMessageTimestamp,
-                unreadCount = domain.unreadCount
+                unreadCount = domain.unreadCount,
+                isAccepted = domain.isAccepted
             )
         }
     }

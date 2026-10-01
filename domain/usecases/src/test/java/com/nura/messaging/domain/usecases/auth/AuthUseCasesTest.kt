@@ -121,6 +121,15 @@ class AuthUseCasesTest {
         assertEquals("123456", fakeRepository.lastPassedToken)
     }
 
+    @Test
+    fun `uploadAvatar delegates to repository and returns avatar url`() = runTest {
+        val uploadAvatarUseCase = UploadAvatarUseCase(fakeRepository)
+        val result = uploadAvatarUseCase("user_1", byteArrayOf(1, 2, 3))
+
+        assertTrue(result.isSuccess)
+        assertEquals("https://test.storage/avatars/user_1.jpg", result.getOrNull())
+    }
+
     private class FakeAuthRepository : AuthRepository {
         var lastPassedName: String? = null
         var lastPassedEmail: String? = null
@@ -187,6 +196,9 @@ class AuthUseCasesTest {
 
         override suspend fun updateProfile(name: String, about: String, avatarUrl: String?): Result<AuthUser> =
             Result.success(AuthUser("id_1", "test@nura.chat", name, about = about))
+
+        override suspend fun uploadAvatar(userId: String, imageBytes: ByteArray): Result<String> =
+            Result.success("https://test.storage/avatars/$userId.jpg")
 
         override suspend fun getRemoteUserProfile(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?> =
             Result.success(com.nura.messaging.domain.entities.auth.RemoteUserProfile(userId, "test", "Test User", "about", null))

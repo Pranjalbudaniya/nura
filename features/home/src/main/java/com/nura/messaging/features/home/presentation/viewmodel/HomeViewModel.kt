@@ -95,7 +95,8 @@ class HomeViewModel @Inject constructor(
             unreadCount = unreadCount,
             participantId = participantId,
             participantUsername = participantUsername,
-            isProfileShared = isProfileShared
+            isProfileShared = isProfileShared,
+            isAccepted = isAccepted
         )
     }
 }

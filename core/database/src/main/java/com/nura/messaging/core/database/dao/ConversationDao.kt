@@ -37,6 +37,6 @@ interface ConversationDao {
     @Query("UPDATE conversations SET unreadCount = 0 WHERE conversationId = :conversationId")
     suspend fun markAsRead(conversationId: String)
 
-    @Query("UPDATE conversations SET unreadCount = 0 WHERE conversationId = :conversationId")
+    @Query("UPDATE conversations SET isAccepted = 1, unreadCount = 0 WHERE conversationId = :conversationId")
     suspend fun acceptConversation(conversationId: String)
 }

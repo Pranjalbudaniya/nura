@@ -37,8 +37,11 @@ import com.nura.messaging.domain.usecases.contacts.SaveUserProfilePictureUseCase
 import com.nura.messaging.domain.usecases.contacts.SaveUserPresetAvatarUseCase
 import com.nura.messaging.domain.usecases.contacts.SaveUserPresetColorUseCase
 import com.nura.messaging.domain.usecases.contacts.GetUserPresetIndexUseCase
+import android.content.Context
+import com.nura.messaging.domain.usecases.auth.UploadAvatarUseCase
 import com.nura.messaging.domain.usecases.contacts.GetUserPresetColorUseCase
 import com.nura.messaging.domain.usecases.auth.UpdateProfileUseCase
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -61,7 +64,9 @@ class AuthViewModel @Inject constructor(
     private val saveUserPresetColorUseCase: SaveUserPresetColorUseCase,
     private val getUserPresetIndexUseCase: GetUserPresetIndexUseCase,
     private val getUserPresetColorUseCase: GetUserPresetColorUseCase,
-    private val updateProfileUseCase: UpdateProfileUseCase
+    private val updateProfileUseCase: UpdateProfileUseCase,
+    private val uploadAvatarUseCase: UploadAvatarUseCase,
+    @ApplicationContext private val context: Context? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -620,13 +625,16 @@ class AuthViewModel @Inject constructor(
                         selectedPresetColor = null
                     )
                 }
-                val base64 = compressImageToBase64(targetUri)
-                if (!base64.isNullOrBlank()) {
+                val remoteAvatar = processAndUploadAvatar(user.id, targetUri)
+                if (!remoteAvatar.isNullOrBlank()) {
                     updateProfileUseCase(
                         name = user.name.ifBlank { user.username },
                         about = user.about.ifBlank { "HI there i'm using nura" },
-                        avatarUrl = base64
+                        avatarUrl = remoteAvatar
                     )
+                    _uiState.update { current ->
+                        current.copy(currentUser = current.currentUser?.copy(avatarUrl = remoteAvatar))
+                    }
                 }
             }
         } else {
@@ -693,7 +701,7 @@ class AuthViewModel @Inject constructor(
                 val avatarUrl = when {
                     !pic.isNullOrBlank() -> {
                         saveUserProfilePictureUseCase(user.id, pic)
-                        compressImageToBase64(pic)
+                        processAndUploadAvatar(user.id, pic)
                     }
                     presetIdx != null -> {
                         saveUserPresetAvatarUseCase(user.id, presetIdx)
@@ -710,6 +718,11 @@ class AuthViewModel @Inject constructor(
                     about = user.about.ifBlank { "HI there i'm using nura" },
                     avatarUrl = avatarUrl
                 )
+                if (avatarUrl != null) {
+                    _uiState.update { current ->
+                        current.copy(currentUser = current.currentUser?.copy(avatarUrl = avatarUrl))
+                    }
+                }
             }
         }
         _uiState.update { it.copy(isNewUserRegistration = false) }
@@ -724,35 +737,71 @@ class AuthViewModel @Inject constructor(
             val presetIdx = _uiState.value.selectedPresetIndex
             val presetColor = _uiState.value.selectedPresetColor
             val avatarUrl = when {
-                !pic.isNullOrBlank() -> compressImageToBase64(pic)
+                !pic.isNullOrBlank() -> processAndUploadAvatar(current.id, pic)
                 presetIdx != null -> "preset:$presetIdx"
                 presetColor != null -> "color:$presetColor"
                 else -> null
             }
             updateProfileUseCase(name, about, avatarUrl)
+            if (avatarUrl != null) {
+                _uiState.update { state ->
+                    state.copy(currentUser = state.currentUser?.copy(avatarUrl = avatarUrl))
+                }
+            }
         }
     }
 
-    private fun compressImageToBase64(uriString: String): String? {
+    private suspend fun processAndUploadAvatar(userId: String, uriString: String): String? {
+        if (uriString.startsWith("http://") || uriString.startsWith("https://")) return uriString
+        if (uriString.startsWith("preset:") || uriString.startsWith("color:")) return uriString
+
+        val bytes = compressImageToJpeg(uriString) ?: return null
+        val uploadResult = uploadAvatarUseCase(userId, bytes)
+        return uploadResult.getOrNull() ?: run {
+            // Fallback to base64 if storage bucket is not configured yet
+            "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+        }
+    }
+
+    private fun compressImageToJpeg(uriString: String): ByteArray? {
         return try {
-            if (uriString.startsWith("data:") || uriString.startsWith("http")) return uriString
-            val path = if (uriString.startsWith("file://")) uriString.removePrefix("file://") else uriString
-            val file = java.io.File(path)
-            val bitmap = if (file.exists()) {
-                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
-            } else {
-                null
+            if (uriString.startsWith("data:image")) {
+                val base64 = uriString.substringAfter(",")
+                return android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
             }
-            if (bitmap != null) {
-                // Downscale to 160x160 to keep payload compact (<8KB) for Supabase
-                val scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, 160, 160, true)
-                val outputStream = java.io.ByteArrayOutputStream()
-                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, outputStream)
-                val bytes = outputStream.toByteArray()
-                "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            val uri = android.net.Uri.parse(uriString)
+            val bitmap = when (uri.scheme) {
+                "content" -> {
+                    context?.contentResolver?.openInputStream(uri)?.use { stream ->
+                        android.graphics.BitmapFactory.decodeStream(stream)
+                    }
+                }
+                "file" -> {
+                    android.graphics.BitmapFactory.decodeFile(uri.path)
+                }
+                else -> {
+                    val path = if (uriString.startsWith("file://")) uriString.removePrefix("file://") else uriString
+                    val file = java.io.File(path)
+                    if (file.exists()) android.graphics.BitmapFactory.decodeFile(file.absolutePath) else null
+                }
+            } ?: return null
+
+            val scaled = if (bitmap.width > 512 || bitmap.height > 512) {
+                val maxDim = maxOf(bitmap.width, bitmap.height)
+                val scale = 512f / maxDim
+                android.graphics.Bitmap.createScaledBitmap(
+                    bitmap,
+                    (bitmap.width * scale).toInt().coerceAtLeast(1),
+                    (bitmap.height * scale).toInt().coerceAtLeast(1),
+                    true
+                )
             } else {
-                null
+                bitmap
             }
+
+            val outputStream = java.io.ByteArrayOutputStream()
+            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, outputStream)
+            outputStream.toByteArray()
         } catch (_: Exception) {
             null
         }

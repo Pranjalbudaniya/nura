@@ -126,7 +126,8 @@ data class HomeConversationItem(
     val isOutgoing: Boolean = false,
     val participantId: String = "",
     val participantUsername: String = "",
-    val isProfileShared: Boolean = false
+    val isProfileShared: Boolean = false,
+    val isAccepted: Boolean = false
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -169,12 +170,12 @@ fun HomeScreen(
 
     // Count of first incoming message requests
     val requestsCount = remember(conversations) {
-        conversations.count { !it.isProfileShared && !it.isOutgoing }
+        conversations.count { !it.isAccepted && !it.isProfileShared && !it.isOutgoing }
     }
 
     val filteredConversations = remember(conversations, selectedFilter, searchQuery) {
         conversations.filter { item ->
-            val isRequest = !item.isProfileShared && !item.isOutgoing
+            val isRequest = !item.isAccepted && !item.isProfileShared && !item.isOutgoing
             val matchesFilter = when (selectedFilter) {
                 HomeFilterTab.ALL -> !isRequest
                 HomeFilterTab.UNREAD -> item.unreadCount > 0 && !isRequest
@@ -1241,15 +1242,75 @@ private fun ConversationRowItem(
         Box(
             modifier = Modifier.size(48.dp)
         ) {
-            if (conversation.isProfileShared && !conversation.avatarUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = conversation.avatarUrl,
-                    contentDescription = conversation.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                )
+            val isAvatarVisible = (conversation.isProfileShared || conversation.isAccepted) && !conversation.avatarUrl.isNullOrBlank()
+            if (isAvatarVisible) {
+                val rawAvatar = conversation.avatarUrl!!
+                if (rawAvatar.startsWith("preset:")) {
+                    val idx = rawAvatar.removePrefix("preset:").toIntOrNull()
+                    if (idx != null) {
+                        AvatarArchetypeCanvas(
+                            presetIndex = idx,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .padding(4.dp)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(colorScheme.surfaceContainerHigh),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = conversation.initials,
+                                fontFamily = PlusJakartaSansFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else if (rawAvatar.startsWith("color:")) {
+                    val colorLong = rawAvatar.removePrefix("color:").toLongOrNull()
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (colorLong != null) Color(colorLong.toULong()) else colorScheme.surfaceContainerHigh),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = conversation.initials,
+                            fontFamily = PlusJakartaSansFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp,
+                            color = Color.White
+                        )
+                    }
+                } else {
+                    val imageModel = remember(rawAvatar) {
+                        if (rawAvatar.startsWith("data:")) {
+                            val base64 = rawAvatar.substringAfter(",")
+                            try {
+                                android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                            } catch (_: Exception) {
+                                rawAvatar
+                            }
+                        } else {
+                            rawAvatar
+                        }
+                    }
+                    AsyncImage(
+                        model = imageModel,
+                        contentDescription = conversation.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    )
+                }
             } else {
                 Box(
                     modifier = Modifier

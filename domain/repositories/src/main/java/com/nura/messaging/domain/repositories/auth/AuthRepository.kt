@@ -19,5 +19,6 @@ interface AuthRepository {
     fun observeAuthState(): Flow<AuthUser?>
     suspend fun handleDeepLink(uriString: String): Boolean
     suspend fun updateProfile(name: String, about: String, avatarUrl: String? = null): Result<AuthUser>
+    suspend fun uploadAvatar(userId: String, imageBytes: ByteArray): Result<String>
     suspend fun getRemoteUserProfile(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?>
 }

@@ -54,8 +54,8 @@ class ChatRepositoryImpl @Inject constructor(
         return conversationDao.getAllConversations()
             .map { list ->
                 list.map { conv ->
-                    val isShared = messageDao.hasBothExchangedFirstMessage(conv.conversationId)
-                    conv.toDomain().copy(isProfileShared = isShared)
+                    val isShared = conv.isAccepted || messageDao.hasBothExchangedFirstMessage(conv.conversationId)
+                    conv.toDomain().copy(isAccepted = conv.isAccepted, isProfileShared = isShared)
                 }
             }
             .flowOn(dispatchers.io)
@@ -87,6 +87,7 @@ class ChatRepositoryImpl @Inject constructor(
         val existing = conversationDao.getConversationById(conversationId)
         if (existing != null) {
             conversationDao.updateLastMessage(conversationId, content, now)
+            conversationDao.acceptConversation(conversationId)
         } else {
             // Check if contact exists in local connections for receiver details
             val contact = localContactsSource.getRecentConnections(currentUserId)
@@ -104,7 +105,8 @@ class ChatRepositoryImpl @Inject constructor(
                     participantAvatarUrl = avatarUrl,
                     lastMessage = content,
                     lastMessageTimestamp = now,
-                    unreadCount = 0
+                    unreadCount = 0,
+                    isAccepted = true
                 )
             )
         }
@@ -313,7 +315,8 @@ class ChatRepositoryImpl @Inject constructor(
             participantAvatarUrl = resolvedAvatar,
             lastMessage = null,
             lastMessageTimestamp = System.currentTimeMillis(),
-            unreadCount = 0
+            unreadCount = 0,
+            isAccepted = true
         )
         conversationDao.upsertConversation(newConv)
         newConv.toDomain()

@@ -361,7 +361,7 @@ fun NuraNavHost(
                     navController.navigate(NavRoute.Settings)
                 },
                 onConversationClick = { item ->
-                    val isReq = !item.isProfileShared && !item.isOutgoing
+                    val isReq = !item.isAccepted && !item.isProfileShared && !item.isOutgoing
                     navController.navigate(
                         NavRoute.Chat(
                             conversationId = item.id,

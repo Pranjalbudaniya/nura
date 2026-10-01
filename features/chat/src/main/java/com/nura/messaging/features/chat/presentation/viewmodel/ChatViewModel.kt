@@ -64,6 +64,7 @@ class ChatViewModel @Inject constructor(
                 participantAvatarUrl = participantAvatarUrl,
                 participantAbout = participantAbout ?: "HI there i'm using nura",
                 isRequest = isRequest,
+                isAccepted = !isRequest,
                 isLoading = true
             )
         }
@@ -87,12 +88,15 @@ class ChatViewModel @Inject constructor(
 
         // Ensure conversation exists in local database
         viewModelScope.launch(dispatchers.io) {
-            getOrCreateConversationUseCase(
+            val conv = getOrCreateConversationUseCase(
                 participantId = participantId,
                 name = participantName,
                 username = participantUsername,
                 avatarUrl = participantAvatarUrl
             )
+            if (conv.isAccepted) {
+                _uiState.update { it.copy(isAccepted = true, isProfileShared = true) }
+            }
         }
 
         // Start observing local database messages (the permanent single source of truth)
@@ -101,9 +105,9 @@ class ChatViewModel @Inject constructor(
             getMessagesUseCase(conversationId).collect { msgList ->
                 val hasOutgoing = msgList.any { it.isOutgoing }
                 val hasIncoming = msgList.any { !it.isOutgoing }
-                val isShared = hasOutgoing && hasIncoming
-                _uiState.update {
-                    it.copy(
+                _uiState.update { current ->
+                    val isShared = current.isAccepted || (hasOutgoing && hasIncoming)
+                    current.copy(
                         messages = msgList,
                         isLoading = false,
                         isProfileShared = isShared

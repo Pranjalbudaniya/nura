@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -161,7 +162,7 @@ private fun ChatScreenContent(
                     .border(1.dp, colors.badgeBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (uiState.isProfileShared && !uiState.participantAvatarUrl.isNullOrBlank()) {
+                if ((uiState.isProfileShared || uiState.isAccepted) && !uiState.participantAvatarUrl.isNullOrBlank()) {
                     val rawAvatar = uiState.participantAvatarUrl!!
                     if (rawAvatar.startsWith("preset:")) {
                         val idx = rawAvatar.removePrefix("preset:").toIntOrNull()
@@ -173,9 +174,37 @@ private fun ChatScreenContent(
                                     .padding(4.dp)
                             )
                         }
+                    } else if (rawAvatar.startsWith("color:")) {
+                        val colorLong = rawAvatar.removePrefix("color:").toLongOrNull()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(if (colorLong != null) Color(colorLong.toULong()) else colors.badgeBackground),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = uiState.participantName.take(1).uppercase(Locale.getDefault()).ifEmpty { "?" },
+                                fontFamily = PlusJakartaSansFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = Color.White
+                            )
+                        }
                     } else {
+                        val imageModel = remember(rawAvatar) {
+                            if (rawAvatar.startsWith("data:")) {
+                                val base64 = rawAvatar.substringAfter(",")
+                                try {
+                                    android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                } catch (_: Exception) {
+                                    rawAvatar
+                                }
+                            } else {
+                                rawAvatar
+                            }
+                        }
                         AsyncImage(
-                            model = rawAvatar,
+                            model = imageModel,
                             contentDescription = uiState.participantName,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -414,9 +443,37 @@ private fun SquareProfileHeaderCard(
                                     .padding(8.dp)
                             )
                         }
+                    } else if (avatarUrl.startsWith("color:")) {
+                        val colorLong = avatarUrl.removePrefix("color:").toLongOrNull()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(if (colorLong != null) Color(colorLong.toULong()) else colors.badgeBackground),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = name.take(1).uppercase(Locale.getDefault()).ifEmpty { "?" },
+                                fontFamily = PlusJakartaSansFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 32.sp,
+                                color = Color.White
+                            )
+                        }
                     } else {
+                        val imageModel = remember(avatarUrl) {
+                            if (avatarUrl.startsWith("data:")) {
+                                val base64 = avatarUrl.substringAfter(",")
+                                try {
+                                    android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                } catch (_: Exception) {
+                                    avatarUrl
+                                }
+                            } else {
+                                avatarUrl
+                            }
+                        }
                         AsyncImage(
-                            model = avatarUrl,
+                            model = imageModel,
                             contentDescription = name,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()

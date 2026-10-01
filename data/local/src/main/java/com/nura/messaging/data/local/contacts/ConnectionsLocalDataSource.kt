@@ -140,6 +140,11 @@ open class ConnectionsLocalDataSource @Inject constructor(
         } else null
     }
 
+    open suspend fun clearAllConnections() = withContext(Dispatchers.IO) {
+        inMemoryConnections.clear()
+        inMemoryAvatars.clear()
+    }
+
     open suspend fun getLocalProfilePicture(userId: String): String? = withContext(Dispatchers.IO) {
         if (userId.isBlank()) return@withContext null
         val stored = getPrefs(userId)?.getString(KEY_USER_AVATAR, null) ?: inMemoryAvatars[userId]

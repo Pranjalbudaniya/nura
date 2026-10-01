@@ -174,6 +174,33 @@ class SupabaseAuthDataSource @Inject constructor(
         }
     }
 
+    suspend fun uploadAvatar(userId: String, imageBytes: ByteArray): String? = withContext(Dispatchers.IO) {
+        try {
+            val token = auth.currentAccessTokenOrNull()
+            val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/storage/v1/object/avatars/${userId}.jpg"
+            val request = Request.Builder()
+                .url(url)
+                .header("apikey", SupabaseConfig.DEFAULT_ANON_KEY)
+                .header("Authorization", "Bearer ${token ?: SupabaseConfig.DEFAULT_ANON_KEY}")
+                .header("Content-Type", "image/jpeg")
+                .header("x-upsert", "true")
+                .post(imageBytes.toRequestBody("image/jpeg".toMediaType()))
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val success = response.isSuccessful
+            response.close()
+
+            if (success) {
+                "${SupabaseConfig.DEFAULT_SUPABASE_URL}/storage/v1/object/public/avatars/${userId}.jpg?t=${System.currentTimeMillis()}"
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun updateProfile(
         userId: String,
         name: String,
@@ -211,10 +238,11 @@ class SupabaseAuthDataSource @Inject constructor(
             } catch (_: Exception) {}
         }
 
-        // 2. Update Supabase PostgREST public.profiles table
+        // 2. Idempotent Upsert into Supabase PostgREST public.profiles table
         try {
-            val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/rest/v1/profiles?id=eq.$userId"
+            val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/rest/v1/profiles"
             val json = buildJsonObject {
+                put("id", userId)
                 put("full_name", name)
                 put("display_name", name)
                 put("about", about)
@@ -227,9 +255,9 @@ class SupabaseAuthDataSource @Inject constructor(
                 .url(url)
                 .header("apikey", SupabaseConfig.DEFAULT_ANON_KEY)
                 .header("Authorization", "Bearer ${token ?: SupabaseConfig.DEFAULT_ANON_KEY}")
-                .header("Prefer", "return=minimal")
+                .header("Prefer", "resolution=merge-duplicates")
                 .header("Content-Type", "application/json")
-                .patch(json.toRequestBody("application/json".toMediaType()))
+                .post(json.toRequestBody("application/json".toMediaType()))
                 .build()
 
             withContext(Dispatchers.IO) {

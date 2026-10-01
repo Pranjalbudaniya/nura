@@ -128,3 +128,11 @@ class GetRemoteUserProfileUseCase @Inject constructor(
     }
 }
 
+class UploadAvatarUseCase @Inject constructor(
+    private val repository: AuthRepository
+) {
+    suspend operator fun invoke(userId: String, imageBytes: ByteArray): Result<String> {
+        return repository.uploadAvatar(userId, imageBytes)
+    }
+}
+

@@ -89,7 +89,8 @@ class AuthViewModelTest {
             saveUserPresetColorUseCase = com.nura.messaging.domain.usecases.contacts.SaveUserPresetColorUseCase(fakeContactsRepository),
             getUserPresetIndexUseCase = com.nura.messaging.domain.usecases.contacts.GetUserPresetIndexUseCase(fakeContactsRepository),
             getUserPresetColorUseCase = com.nura.messaging.domain.usecases.contacts.GetUserPresetColorUseCase(fakeContactsRepository),
-            updateProfileUseCase = com.nura.messaging.domain.usecases.auth.UpdateProfileUseCase(fakeRepository)
+            updateProfileUseCase = com.nura.messaging.domain.usecases.auth.UpdateProfileUseCase(fakeRepository),
+            uploadAvatarUseCase = com.nura.messaging.domain.usecases.auth.UploadAvatarUseCase(fakeRepository)
         )
     }
 
@@ -416,6 +417,9 @@ class AuthViewModelTest {
 
         override suspend fun updateProfile(name: String, about: String, avatarUrl: String?): Result<AuthUser> =
             Result.success(AuthUser("user_123", "user@nura.chat", name, about = about, isEmailVerified = true))
+
+        override suspend fun uploadAvatar(userId: String, imageBytes: ByteArray): Result<String> =
+            Result.success("https://test.storage/avatars/$userId.jpg")
 
         override suspend fun getRemoteUserProfile(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?> =
             Result.success(com.nura.messaging.domain.entities.auth.RemoteUserProfile(userId, "test", "Test User", "about", null))

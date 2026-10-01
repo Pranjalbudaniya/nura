@@ -286,8 +286,21 @@ fun ProfilePictureScreen(
                         ) {
                             when {
                                 uiState.profilePictureUri != null -> {
+                                    val imageModel = remember(uiState.profilePictureUri) {
+                                        val uri = uiState.profilePictureUri!!
+                                        if (uri.startsWith("data:")) {
+                                            val base64 = uri.substringAfter(",")
+                                            try {
+                                                android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                            } catch (_: Exception) {
+                                                uri
+                                            }
+                                        } else {
+                                            uri
+                                        }
+                                    }
                                     AsyncImage(
-                                        model = uiState.profilePictureUri,
+                                        model = imageModel,
                                         contentDescription = "Profile picture",
                                         modifier = Modifier.fillMaxSize(),
                                         contentScale = ContentScale.Crop

@@ -12,7 +12,7 @@ import com.nura.messaging.core.database.entity.MessageEntity
         MessageEntity::class,
         ConversationEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class NuraDatabase : RoomDatabase() {

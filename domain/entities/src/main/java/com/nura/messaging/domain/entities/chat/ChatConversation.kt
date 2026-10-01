@@ -12,5 +12,6 @@ data class ChatConversation(
     val lastMessage: String? = null,
     val lastMessageTimestamp: Long = 0L,
     val unreadCount: Int = 0,
-    val isProfileShared: Boolean = false
+    val isProfileShared: Boolean = false,
+    val isAccepted: Boolean = false
 )

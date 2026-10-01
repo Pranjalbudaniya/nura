@@ -1,28 +1,40 @@
 package com.nura.messaging.data.repositories.auth
 
+import android.content.Context
 import android.net.Uri
+import com.nura.messaging.core.common.util.DispatcherProvider
+import com.nura.messaging.core.database.NuraDatabase
+import com.nura.messaging.data.local.contacts.ConnectionsLocalDataSource
 import com.nura.messaging.data.remote.auth.SupabaseAuthDataSource
 import com.nura.messaging.domain.entities.auth.AuthUser
 import com.nura.messaging.domain.repositories.auth.AuthRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.exceptions.HttpRequestException
 import io.github.jan.supabase.exceptions.RestException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
-    private val remoteDataSource: SupabaseAuthDataSource
+    private val remoteDataSource: SupabaseAuthDataSource,
+    private val database: NuraDatabase,
+    private val localContactsSource: ConnectionsLocalDataSource,
+    @ApplicationContext private val context: Context,
+    private val dispatchers: DispatcherProvider
 ) : AuthRepository {
 
-    override suspend fun signInWithEmail(email: String, password: String): Result<AuthUser> {
-        return runCatching {
+    override suspend fun signInWithEmail(email: String, password: String): Result<AuthUser> = withContext(dispatchers.io) {
+        runCatching {
             val user = remoteDataSource.signInWithEmail(email, password)
-            user.toDomain()
+            val domain = user.toDomain()
+            checkAndIsolateAccount(domain.id)
+            domain
         }.mapFailure()
     }
 
@@ -35,20 +47,24 @@ class AuthRepositoryImpl @Inject constructor(
         username: String,
         email: String,
         password: String
-    ): Result<AuthUser> {
-        return runCatching {
+    ): Result<AuthUser> = withContext(dispatchers.io) {
+        runCatching {
             val user = remoteDataSource.signUpWithEmail(name, username, email, password)
             // If email is already registered in Supabase, identities list is empty to prevent duplicates
             if (user != null && user.identities?.isEmpty() == true) {
                 throw IllegalStateException("An account with this email already exists. Please log in instead.")
             }
-            user?.toDomain() ?: AuthUser(
+            val domain = user?.toDomain() ?: AuthUser(
                 id = "",
                 email = email,
                 name = name,
                 username = username,
                 isEmailVerified = false
             )
+            if (domain.id.isNotBlank()) {
+                checkAndIsolateAccount(domain.id)
+            }
+            domain
         }.mapFailure()
     }
 
@@ -58,15 +74,24 @@ class AuthRepositoryImpl @Inject constructor(
         }.mapFailure()
     }
 
-    override suspend fun signInWithGoogle(): Result<AuthUser> {
-        return runCatching {
+    override suspend fun signInWithGoogle(): Result<AuthUser> = withContext(dispatchers.io) {
+        runCatching {
             val user = remoteDataSource.signInWithGoogle()
-            user?.toDomain() ?: throw IllegalStateException("Google sign-in cancelled or interrupted")
+            val domain = user?.toDomain() ?: throw IllegalStateException("Google sign-in cancelled or interrupted")
+            checkAndIsolateAccount(domain.id)
+            domain
         }.mapFailure()
     }
 
-    override suspend fun signOut(): Result<Unit> {
-        return runCatching {
+    override suspend fun signOut(): Result<Unit> = withContext(dispatchers.io) {
+        runCatching {
+            try {
+                database.clearAllTables()
+            } catch (_: Exception) {}
+            try {
+                localContactsSource.clearAllConnections()
+            } catch (_: Exception) {}
+            clearActiveUserId()
             remoteDataSource.signOut()
         }.mapFailure()
     }
@@ -89,15 +114,21 @@ class AuthRepositoryImpl @Inject constructor(
         }.mapFailure()
     }
 
-    override suspend fun verifyEmailOtp(email: String, token: String): Result<AuthUser> {
-        return runCatching {
+    override suspend fun verifyEmailOtp(email: String, token: String): Result<AuthUser> = withContext(dispatchers.io) {
+        runCatching {
             val user = remoteDataSource.verifyEmailOtp(email, token)
-            user.toDomain()
+            val domain = user.toDomain()
+            checkAndIsolateAccount(domain.id)
+            domain
         }.mapFailure()
     }
 
-    override suspend fun getCurrentUser(): AuthUser? {
-        return remoteDataSource.getCurrentUser()?.toDomain()
+    override suspend fun getCurrentUser(): AuthUser? = withContext(dispatchers.io) {
+        val user = remoteDataSource.getCurrentUser()?.toDomain()
+        if (user != null && user.id.isNotBlank()) {
+            checkAndIsolateAccount(user.id)
+        }
+        user
     }
 
     override fun observeAuthState(): Flow<AuthUser?> {
@@ -118,20 +149,58 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun updateProfile(name: String, about: String, avatarUrl: String?): Result<AuthUser> = runCatching {
-        val current = remoteDataSource.getCurrentUser() ?: throw IllegalStateException("Not authenticated")
-        val updated = remoteDataSource.updateProfile(current.id, name, about, avatarUrl)
-        val domain = (updated ?: current).toDomain()
-        domain.copy(
-            name = name,
-            about = about,
-            avatarUrl = avatarUrl ?: domain.avatarUrl
-        )
-    }.mapFailure()
+    override suspend fun updateProfile(name: String, about: String, avatarUrl: String?): Result<AuthUser> = withContext(dispatchers.io) {
+        runCatching {
+            val current = remoteDataSource.getCurrentUser() ?: throw IllegalStateException("Not authenticated")
+            val updated = remoteDataSource.updateProfile(current.id, name, about, avatarUrl)
+            val domain = (updated ?: current).toDomain()
+            domain.copy(
+                name = name,
+                about = about,
+                avatarUrl = avatarUrl ?: domain.avatarUrl
+            )
+        }.mapFailure()
+    }
+
+    override suspend fun uploadAvatar(userId: String, imageBytes: ByteArray): Result<String> = withContext(dispatchers.io) {
+        runCatching {
+            remoteDataSource.uploadAvatar(userId, imageBytes)
+                ?: throw IllegalStateException("Failed to upload avatar to storage")
+        }.mapFailure()
+    }
 
     override suspend fun getRemoteUserProfile(userId: String): Result<com.nura.messaging.domain.entities.auth.RemoteUserProfile?> = runCatching {
         remoteDataSource.fetchRemoteProfile(userId)
     }.mapFailure()
+
+    private suspend fun checkAndIsolateAccount(newUserId: String) {
+        if (newUserId.isBlank()) return
+        val lastUserId = getActiveUserId()
+        if (lastUserId != null && lastUserId != newUserId) {
+            try {
+                database.clearAllTables()
+            } catch (_: Exception) {}
+            try {
+                localContactsSource.clearAllConnections()
+            } catch (_: Exception) {}
+        }
+        saveActiveUserId(newUserId)
+    }
+
+    private fun getActiveUserId(): String? {
+        val prefs = context.getSharedPreferences("nura_auth_state", Context.MODE_PRIVATE)
+        return prefs.getString("last_active_user_id", null)
+    }
+
+    private fun saveActiveUserId(userId: String) {
+        val prefs = context.getSharedPreferences("nura_auth_state", Context.MODE_PRIVATE)
+        prefs.edit().putString("last_active_user_id", userId).apply()
+    }
+
+    private fun clearActiveUserId() {
+        val prefs = context.getSharedPreferences("nura_auth_state", Context.MODE_PRIVATE)
+        prefs.edit().remove("last_active_user_id").apply()
+    }
 
     private fun UserInfo.toDomain(): AuthUser {
         val fullName = userMetadata?.get("full_name")?.jsonPrimitive?.content

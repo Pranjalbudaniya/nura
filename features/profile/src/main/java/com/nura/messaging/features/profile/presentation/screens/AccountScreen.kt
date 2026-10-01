@@ -111,8 +111,8 @@ fun AccountScreen(
     var isSavedConfirmation by remember { mutableStateOf(false) }
 
     // Instant local avatar state
-    var localAvatarUri by rememberSaveable(profilePictureUri) {
-        mutableStateOf(profilePictureUri)
+    var localAvatarUri by rememberSaveable(profilePictureUri, currentUser?.avatarUrl) {
+        mutableStateOf(profilePictureUri ?: currentUser?.avatarUrl)
     }
 
     // Cropping & Camera States
@@ -293,19 +293,77 @@ fun AccountScreen(
                 ) {
                     when {
                         !localAvatarUri.isNullOrBlank() -> {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(localAvatarUri)
-                                    .memoryCachePolicy(CachePolicy.DISABLED)
-                                    .diskCachePolicy(CachePolicy.DISABLED)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = "Profile picture",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(28.dp))
-                            )
+                            val uri = localAvatarUri!!
+                            if (uri.startsWith("preset:")) {
+                                val idx = uri.removePrefix("preset:").toIntOrNull()
+                                if (idx != null) {
+                                    AvatarArchetypeCanvas(
+                                        presetIndex = idx,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(colors.cardDarkBubble),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val initial = currentUser?.name?.take(1)?.uppercase()
+                                            ?: currentUser?.username?.take(1)?.uppercase()
+                                            ?: "U"
+                                        Text(
+                                            text = initial,
+                                            fontFamily = PlusJakartaSansFamily,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 42.sp,
+                                            color = colors.terracottaAccent
+                                        )
+                                    }
+                                }
+                            } else if (uri.startsWith("color:")) {
+                                val colorLong = uri.removePrefix("color:").toLongOrNull()
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(if (colorLong != null) Color(colorLong.toULong()) else colors.cardDarkBubble),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val initial = currentUser?.name?.take(1)?.uppercase()
+                                        ?: currentUser?.username?.take(1)?.uppercase()
+                                        ?: "U"
+                                    Text(
+                                        text = initial,
+                                        fontFamily = PlusJakartaSansFamily,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 42.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            } else {
+                                val imageModel = if (uri.startsWith("data:")) {
+                                    val base64 = uri.substringAfter(",")
+                                    try {
+                                        android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    } catch (_: Exception) {
+                                        uri
+                                    }
+                                } else {
+                                    uri
+                                }
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(imageModel)
+                                        .memoryCachePolicy(CachePolicy.DISABLED)
+                                        .diskCachePolicy(CachePolicy.DISABLED)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "Profile picture",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(28.dp))
+                                )
+                            }
                         }
                         selectedPresetIndex != null -> {
                             AvatarArchetypeCanvas(
