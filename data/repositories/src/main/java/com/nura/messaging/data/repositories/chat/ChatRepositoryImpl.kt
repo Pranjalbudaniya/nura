@@ -24,9 +24,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.nura.messaging.data.remote.auth.SupabaseAuthDataSource
 import com.nura.messaging.domain.repositories.notification.NotificationService
+import kotlinx.serialization.json.jsonPrimitive
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+
 
 @Singleton
 class ChatRepositoryImpl @Inject constructor(
@@ -112,6 +114,12 @@ class ChatRepositoryImpl @Inject constructor(
         }
         Log.d(TAG, "Message $messageId saved to local database as PENDING")
 
+        val currentUser = authDataSource.getCurrentUser()
+        val senderName = currentUser?.userMetadata?.get("display_name")?.jsonPrimitive?.content
+            ?: currentUser?.userMetadata?.get("full_name")?.jsonPrimitive?.content
+            ?: "User"
+        val senderAvatar = currentUser?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+
         // 2. Transmit message via Supabase Realtime Broadcast & persistent relay
         val relayDto = MessageRelayDto(
             messageId = messageId,
@@ -121,7 +129,9 @@ class ChatRepositoryImpl @Inject constructor(
             content = content,
             messageType = "text",
             createdAt = now,
-            deliveryStatus = "SENT_TO_SERVER"
+            deliveryStatus = "SENT_TO_SERVER",
+            senderName = senderName,
+            senderAvatar = senderAvatar
         )
 
         val uploadResult = relayDataSource.sendMessageToRelay(relayDto)
@@ -135,6 +145,109 @@ class ChatRepositoryImpl @Inject constructor(
             Result.success(localMessage.copy(status = MessageStatus.FAILED.name).toDomain())
         }
     }
+
+    override suspend fun sendMediaMessage(
+        conversationId: String,
+        receiverId: String,
+        mediaUrl: String,
+        messageType: String,
+        caption: String
+    ): Result<ChatMessage> = withContext(dispatchers.io) {
+        val currentUserId = auth.currentUserOrNull()?.id ?: "me"
+        val messageId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+
+        val content = mediaUrl
+        val localMessage = MessageEntity(
+            messageId = messageId,
+            conversationId = conversationId,
+            senderId = currentUserId,
+            receiverId = receiverId,
+            content = content,
+            messageType = messageType,
+            timestamp = now,
+            status = MessageStatus.PENDING.name,
+            isOutgoing = true
+        )
+        messageDao.upsertMessage(localMessage)
+
+        val snippet = when (messageType) {
+            "image" -> "📷 Photo"
+            "video" -> "🎥 Video"
+            "audio" -> "🎤 Voice message"
+            else -> "Media"
+        }
+
+        val existing = conversationDao.getConversationById(conversationId)
+        if (existing != null) {
+            conversationDao.updateLastMessage(conversationId, snippet, now)
+            conversationDao.acceptConversation(conversationId)
+        } else {
+            val contact = localContactsSource.getRecentConnections(currentUserId)
+                .find { it.id == receiverId }
+            val name = contact?.displayName ?: "User ${receiverId.take(4)}"
+            val username = contact?.username ?: receiverId.take(6)
+            val avatarUrl = contact?.avatarUri
+
+            conversationDao.upsertConversation(
+                ConversationEntity(
+                    conversationId = conversationId,
+                    participantId = receiverId,
+                    participantName = name,
+                    participantUsername = username,
+                    participantAvatarUrl = avatarUrl,
+                    lastMessage = snippet,
+                    lastMessageTimestamp = now,
+                    unreadCount = 0,
+                    isAccepted = true
+                )
+            )
+        }
+
+        val currentUser = authDataSource.getCurrentUser()
+        val senderName = currentUser?.userMetadata?.get("display_name")?.jsonPrimitive?.content
+            ?: currentUser?.userMetadata?.get("full_name")?.jsonPrimitive?.content
+            ?: "User"
+        val senderAvatar = currentUser?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+
+        val relayDto = MessageRelayDto(
+            messageId = messageId,
+            senderId = currentUserId,
+            receiverId = receiverId,
+            conversationId = conversationId,
+            content = content,
+            messageType = messageType,
+            createdAt = now,
+            deliveryStatus = "SENT_TO_SERVER",
+            senderName = senderName,
+            senderAvatar = senderAvatar,
+            mediaUrl = mediaUrl
+        )
+
+        val uploadResult = relayDataSource.sendMessageToRelay(relayDto)
+        if (uploadResult.isSuccess) {
+            messageDao.updateMessageStatus(messageId, MessageStatus.SENT.name)
+            Result.success(localMessage.copy(status = MessageStatus.SENT.name).toDomain())
+        } else {
+            messageDao.updateMessageStatus(messageId, MessageStatus.FAILED.name)
+            Result.success(localMessage.copy(status = MessageStatus.FAILED.name).toDomain())
+        }
+    }
+
+    override suspend fun uploadChatMedia(
+        fileName: String,
+        fileBytes: ByteArray,
+        mimeType: String
+    ): Result<String> = withContext(dispatchers.io) {
+        val url = authDataSource.uploadMedia(fileName, fileBytes, mimeType)
+        if (url != null) {
+            Result.success(url)
+        } else {
+            Result.failure(RuntimeException("Failed to upload media to storage"))
+        }
+    }
+
+
 
     override suspend fun retrySendMessage(messageId: String): Result<Unit> = withContext(dispatchers.io) {
         val message = messageDao.getMessageById(messageId)
@@ -364,19 +477,38 @@ class ChatRepositoryImpl @Inject constructor(
         val existingConv = conversationDao.getConversationById(dto.conversationId)
             ?: conversationDao.getConversationByParticipant(dto.senderId)
 
+        val lastMsgPreview = when (dto.messageType) {
+            "image" -> "📷 Photo"
+            "video" -> "🎥 Video"
+            "audio" -> "🎤 Voice message"
+            else -> dto.content
+        }
+
         if (existingConv != null) {
-            conversationDao.updateLastMessageWithUnread(existingConv.conversationId, dto.content, dto.createdAt)
-            var senderDisplayName = existingConv.participantName
-            if (existingConv.participantName.startsWith("User ") || existingConv.participantAvatarUrl.isNullOrBlank()) {
+            val resolvedAvatar = dto.senderAvatar ?: existingConv.participantAvatarUrl
+            val resolvedName = dto.senderName?.ifBlank { null } ?: existingConv.participantName
+
+            conversationDao.updateLastMessageWithUnread(existingConv.conversationId, lastMsgPreview, dto.createdAt)
+
+            if (resolvedAvatar != existingConv.participantAvatarUrl ||
+                (existingConv.participantName.startsWith("User ") && !dto.senderName.isNullOrBlank())) {
+                conversationDao.upsertConversation(
+                    existingConv.copy(
+                        participantName = resolvedName,
+                        participantAvatarUrl = resolvedAvatar,
+                        lastMessage = lastMsgPreview,
+                        lastMessageTimestamp = dto.createdAt
+                    )
+                )
+            } else if (existingConv.participantAvatarUrl.isNullOrBlank() || existingConv.participantName.startsWith("User ")) {
                 val remote = authDataSource.fetchRemoteProfile(dto.senderId)
                 if (remote != null && remote.displayName.isNotBlank()) {
-                    senderDisplayName = remote.displayName
                     conversationDao.upsertConversation(
                         existingConv.copy(
                             participantName = remote.displayName,
                             participantUsername = remote.username.ifBlank { existingConv.participantUsername },
                             participantAvatarUrl = remote.avatarUrl ?: existingConv.participantAvatarUrl,
-                            lastMessage = dto.content,
+                            lastMessage = lastMsgPreview,
                             lastMessageTimestamp = dto.createdAt
                         )
                     )
@@ -385,8 +517,8 @@ class ChatRepositoryImpl @Inject constructor(
 
             if (dto.senderId != currentUserId) {
                 notificationService.showMessageNotification(
-                    title = senderDisplayName,
-                    content = dto.content,
+                    title = resolvedName,
+                    content = lastMsgPreview,
                     conversationId = existingConv.conversationId,
                     senderId = dto.senderId
                 )
@@ -395,16 +527,19 @@ class ChatRepositoryImpl @Inject constructor(
             val contact = localContactsSource.getRecentConnections(currentUserId)
                 .find { it.id == dto.senderId }
 
-            // Query Supabase directly so we have the real sender name, handle & avatar
-            val remote = authDataSource.fetchRemoteProfile(dto.senderId)
+            // Query Supabase directly if sender name or avatar wasn't included in packet
+            val remote = if (dto.senderName.isNullOrBlank() || dto.senderAvatar.isNullOrBlank()) {
+                authDataSource.fetchRemoteProfile(dto.senderId)
+            } else null
 
-            val displayName = remote?.displayName?.ifBlank { null }
+            val displayName = dto.senderName
+                ?: remote?.displayName?.ifBlank { null }
                 ?: contact?.displayName
                 ?: "User ${dto.senderId.take(4)}"
             val username = remote?.username?.ifBlank { null }
                 ?: contact?.username
                 ?: dto.senderId.take(6)
-            val avatarUrl = remote?.avatarUrl ?: contact?.avatarUri
+            val avatarUrl = dto.senderAvatar ?: remote?.avatarUrl ?: contact?.avatarUri
 
             val newConv = ConversationEntity(
                 conversationId = dto.conversationId,
@@ -412,7 +547,7 @@ class ChatRepositoryImpl @Inject constructor(
                 participantName = displayName,
                 participantUsername = username,
                 participantAvatarUrl = avatarUrl,
-                lastMessage = dto.content,
+                lastMessage = lastMsgPreview,
                 lastMessageTimestamp = dto.createdAt,
                 unreadCount = 1
             )
@@ -421,11 +556,12 @@ class ChatRepositoryImpl @Inject constructor(
             if (dto.senderId != currentUserId) {
                 notificationService.showMessageNotification(
                     title = displayName,
-                    content = dto.content,
+                    content = lastMsgPreview,
                     conversationId = dto.conversationId,
                     senderId = dto.senderId
                 )
             }
         }
     }
+
 }

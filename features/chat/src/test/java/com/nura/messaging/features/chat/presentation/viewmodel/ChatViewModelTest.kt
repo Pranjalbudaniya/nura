@@ -33,6 +33,8 @@ import org.junit.Test
 
 import com.nura.messaging.domain.usecases.chat.MarkConversationAsReadUseCase
 import com.nura.messaging.domain.usecases.chat.SetActiveConversationUseCase
+import com.nura.messaging.domain.usecases.chat.SendMediaMessageUseCase
+import com.nura.messaging.domain.usecases.chat.UploadChatMediaUseCase
 import com.nura.messaging.domain.repositories.notification.NotificationService
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -67,6 +69,8 @@ class ChatViewModelTest {
             getParticipantProfileUseCase = GetParticipantProfileUseCase(fakeRepository),
             markConversationAsReadUseCase = MarkConversationAsReadUseCase(fakeRepository),
             setActiveConversationUseCase = SetActiveConversationUseCase(fakeNotificationService),
+            sendMediaMessageUseCase = SendMediaMessageUseCase(fakeRepository),
+            uploadChatMediaUseCase = UploadChatMediaUseCase(fakeRepository),
             dispatchers = testDispatcherProvider
         )
     }
@@ -94,6 +98,39 @@ class ChatViewModelTest {
     fun `onInputTextChanged updates inputText`() {
         viewModel.onInputTextChanged("Hello Nura")
         assertEquals("Hello Nura", viewModel.uiState.value.inputText)
+    }
+
+    @Test
+    fun `emoji selection and backspace properly updates inputText`() {
+        viewModel.onEmojiSelected("✨")
+        viewModel.onEmojiSelected("🔥")
+        assertEquals("✨🔥", viewModel.uiState.value.inputText)
+
+        viewModel.onEmojiBackspace()
+        assertEquals("✨", viewModel.uiState.value.inputText)
+    }
+
+    @Test
+    fun `sendVideo strictly limits video size to 25 MB`() = runTest {
+        viewModel.initChat("conv_123", "user_456", "Maya Lin", "mayal", null)
+        advanceUntilIdle()
+
+        val largeVideoBytes = ByteArray(100)
+        val over25Mb = 26L * 1024L * 1024L
+        viewModel.sendVideo(largeVideoBytes, over25Mb)
+
+        val state = viewModel.uiState.value
+        assertEquals("Videos cannot be larger than 25 MB.", state.error)
+    }
+
+    @Test
+    fun `audio recording state transitions correctly`() {
+        viewModel.startRecordingAudio()
+        assertTrue(viewModel.uiState.value.isRecordingAudio)
+
+        viewModel.cancelRecordingAudio()
+        assertEquals(false, viewModel.uiState.value.isRecordingAudio)
+        assertEquals(0, viewModel.uiState.value.recordingDurationSeconds)
     }
 
     @Test
@@ -146,6 +183,35 @@ class ChatViewModelTest {
             )
             messages.add(msg)
             return Result.success(msg)
+        }
+
+        override suspend fun sendMediaMessage(
+            conversationId: String,
+            receiverId: String,
+            mediaUrl: String,
+            messageType: String,
+            caption: String
+        ): Result<ChatMessage> {
+            val msg = ChatMessage(
+                id = "m_media",
+                conversationId = conversationId,
+                senderId = "me",
+                receiverId = receiverId,
+                content = mediaUrl,
+                messageType = messageType,
+                status = MessageStatus.SENT,
+                isOutgoing = true
+            )
+            messages.add(msg)
+            return Result.success(msg)
+        }
+
+        override suspend fun uploadChatMedia(
+            fileName: String,
+            fileBytes: ByteArray,
+            mimeType: String
+        ): Result<String> {
+            return Result.success("https://storage.supabase.co/chat_media/$fileName")
         }
 
         override suspend fun retrySendMessage(messageId: String): Result<Unit> = Result.success(Unit)

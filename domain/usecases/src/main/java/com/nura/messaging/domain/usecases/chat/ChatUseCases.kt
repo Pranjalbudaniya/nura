@@ -113,3 +113,31 @@ class SetActiveConversationUseCase @Inject constructor(
         notificationService.setActiveConversation(conversationId)
     }
 }
+
+class SendMediaMessageUseCase @Inject constructor(
+    private val repository: ChatRepository
+) {
+    suspend operator fun invoke(
+        conversationId: String,
+        receiverId: String,
+        mediaUrl: String,
+        messageType: String,
+        caption: String = ""
+    ): Result<ChatMessage> {
+        return repository.sendMediaMessage(conversationId, receiverId, mediaUrl, messageType, caption)
+    }
+}
+
+class UploadChatMediaUseCase @Inject constructor(
+    private val repository: ChatRepository
+) {
+    suspend operator fun invoke(
+        fileName: String,
+        fileBytes: ByteArray,
+        mimeType: String
+    ): Result<String> {
+        return repository.uploadChatMedia(fileName, fileBytes, mimeType)
+    }
+}
+
+

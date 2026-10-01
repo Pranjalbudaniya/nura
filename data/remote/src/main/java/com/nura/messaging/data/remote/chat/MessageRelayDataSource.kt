@@ -92,8 +92,9 @@ class MessageRelayDataSource @Inject constructor(
 
         // 3. Persistent Supabase table insert (for offline pickup when schema exists)
         try {
-            postgrest[TABLE_NAME].insert(dto)
+            postgrest[TABLE_NAME].insert(dto.toTableDto())
             Log.d(TAG, "Message ${dto.messageId} inserted into $TABLE_NAME table")
+
             postgrestSuccess = true
         } catch (e: Exception) {
             Log.w(TAG, "PostgREST insert failed (schema may be pending): ${e.message}")

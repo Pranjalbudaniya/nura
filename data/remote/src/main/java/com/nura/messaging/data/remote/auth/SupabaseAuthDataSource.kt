@@ -201,6 +201,53 @@ class SupabaseAuthDataSource @Inject constructor(
         }
     }
 
+    suspend fun uploadMedia(fileName: String, fileBytes: ByteArray, mimeType: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val token = auth.currentAccessTokenOrNull()
+            val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/storage/v1/object/avatars/${fileName}"
+            val request = Request.Builder()
+                .url(url)
+                .header("apikey", SupabaseConfig.DEFAULT_ANON_KEY)
+                .header("Authorization", "Bearer ${token ?: SupabaseConfig.DEFAULT_ANON_KEY}")
+                .header("Content-Type", mimeType)
+                .header("x-upsert", "true")
+                .post(fileBytes.toRequestBody(mimeType.toMediaType()))
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val success = response.isSuccessful
+            response.close()
+
+            if (success) {
+                "${SupabaseConfig.DEFAULT_SUPABASE_URL}/storage/v1/object/public/avatars/${fileName}"
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+
+    suspend fun deleteAvatarFromStorage(userId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val token = auth.currentAccessTokenOrNull()
+            val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/storage/v1/object/avatars/${userId}.jpg"
+            val request = Request.Builder()
+                .url(url)
+                .header("apikey", SupabaseConfig.DEFAULT_ANON_KEY)
+                .header("Authorization", "Bearer ${token ?: SupabaseConfig.DEFAULT_ANON_KEY}")
+                .delete()
+                .build()
+            val response = okHttpClient.newCall(request).execute()
+            val success = response.isSuccessful
+            response.close()
+            success
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     suspend fun updateProfile(
         userId: String,
         name: String,
@@ -208,6 +255,11 @@ class SupabaseAuthDataSource @Inject constructor(
         avatarUrl: String? = null
     ): UserInfo? {
         val token = auth.currentAccessTokenOrNull()
+
+        // If user changed to a preset or removed custom avatar, delete old image from storage
+        if (avatarUrl == null || avatarUrl.startsWith("preset:") || avatarUrl.startsWith("color:")) {
+            deleteAvatarFromStorage(userId)
+        }
 
         // 1. Update Supabase Auth user metadata
         if (token != null) {
@@ -243,7 +295,6 @@ class SupabaseAuthDataSource @Inject constructor(
             val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/rest/v1/profiles"
             val json = buildJsonObject {
                 put("id", userId)
-                put("full_name", name)
                 put("display_name", name)
                 put("about", about)
                 if (!avatarUrl.isNullOrBlank()) {

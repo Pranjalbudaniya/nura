@@ -681,29 +681,23 @@ fun HomeScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when {
-                            !profilePictureUri.isNullOrBlank() -> {
-                                AsyncImage(
-                                    model = profilePictureUri,
-                                    contentDescription = "Profile and Settings",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(12.dp))
-                                )
+                            profilePictureUri?.startsWith("preset:") == true || selectedPresetIndex != null -> {
+                                val idx = profilePictureUri?.removePrefix("preset:")?.toIntOrNull() ?: selectedPresetIndex
+                                if (idx != null) {
+                                    AvatarArchetypeCanvas(
+                                        presetIndex = idx,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(4.dp)
+                                    )
+                                }
                             }
-                            selectedPresetIndex != null -> {
-                                AvatarArchetypeCanvas(
-                                    presetIndex = selectedPresetIndex,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(4.dp)
-                                )
-                            }
-                            selectedPresetColor != null -> {
+                            profilePictureUri?.startsWith("color:") == true || selectedPresetColor != null -> {
+                                val colorLong = profilePictureUri?.removePrefix("color:")?.toLongOrNull() ?: selectedPresetColor
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Color(selectedPresetColor.toULong()), RoundedCornerShape(12.dp)),
+                                        .background(if (colorLong != null) Color(colorLong.toULong()) else colors.badgeBackground, RoundedCornerShape(12.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     val userInitial = user?.name?.firstOrNull()?.uppercaseChar()?.toString()
@@ -718,6 +712,17 @@ fun HomeScreen(
                                     )
                                 }
                             }
+                            !profilePictureUri.isNullOrBlank() -> {
+                                AsyncImage(
+                                    model = profilePictureUri,
+                                    contentDescription = "Profile and Settings",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(12.dp))
+                                )
+                            }
+
                             else -> {
                                 val userInitial = user?.name?.firstOrNull()?.uppercaseChar()?.toString()
                                     ?: user?.username?.firstOrNull()?.uppercaseChar()?.toString()
@@ -842,29 +847,23 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     when {
-                        !profilePictureUri.isNullOrBlank() -> {
-                            AsyncImage(
-                                model = profilePictureUri,
-                                contentDescription = "User Avatar",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(22.dp))
-                            )
+                        profilePictureUri?.startsWith("preset:") == true || selectedPresetIndex != null -> {
+                            val idx = profilePictureUri?.removePrefix("preset:")?.toIntOrNull() ?: selectedPresetIndex
+                            if (idx != null) {
+                                AvatarArchetypeCanvas(
+                                    presetIndex = idx,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(6.dp)
+                                )
+                            }
                         }
-                        selectedPresetIndex != null -> {
-                            AvatarArchetypeCanvas(
-                                presetIndex = selectedPresetIndex,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(6.dp)
-                            )
-                        }
-                        selectedPresetColor != null -> {
+                        profilePictureUri?.startsWith("color:") == true || selectedPresetColor != null -> {
+                            val colorLong = profilePictureUri?.removePrefix("color:")?.toLongOrNull() ?: selectedPresetColor
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(Color(selectedPresetColor.toULong()), RoundedCornerShape(22.dp)),
+                                    .background(if (colorLong != null) Color(colorLong.toULong()) else colors.badgeBackground, RoundedCornerShape(22.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 val userInitial = user?.name?.firstOrNull()?.uppercaseChar()?.toString()
@@ -879,6 +878,17 @@ fun HomeScreen(
                                 )
                             }
                         }
+                        !profilePictureUri.isNullOrBlank() -> {
+                            AsyncImage(
+                                model = profilePictureUri,
+                                contentDescription = "User Avatar",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(22.dp))
+                            )
+                        }
+
                         else -> {
                             val userInitial = user?.name?.firstOrNull()?.uppercaseChar()?.toString()
                                 ?: user?.username?.firstOrNull()?.uppercaseChar()?.toString()
@@ -1098,29 +1108,23 @@ fun HomeScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when {
-                            !profilePictureUri.isNullOrBlank() -> {
-                                AsyncImage(
-                                    model = profilePictureUri,
-                                    contentDescription = "User Avatar Preview",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(32.dp))
-                                )
+                            profilePictureUri?.startsWith("preset:") == true || selectedPresetIndex != null -> {
+                                val idx = profilePictureUri?.removePrefix("preset:")?.toIntOrNull() ?: selectedPresetIndex
+                                if (idx != null) {
+                                    AvatarArchetypeCanvas(
+                                        presetIndex = idx,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(24.dp)
+                                    )
+                                }
                             }
-                            selectedPresetIndex != null -> {
-                                AvatarArchetypeCanvas(
-                                    presetIndex = selectedPresetIndex,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(24.dp)
-                                )
-                            }
-                            selectedPresetColor != null -> {
+                            profilePictureUri?.startsWith("color:") == true || selectedPresetColor != null -> {
+                                val colorLong = profilePictureUri?.removePrefix("color:")?.toLongOrNull() ?: selectedPresetColor
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Color(selectedPresetColor.toULong()), RoundedCornerShape(32.dp)),
+                                        .background(if (colorLong != null) Color(colorLong.toULong()) else colors.badgeBackground, RoundedCornerShape(32.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     val userInitial = user?.name?.firstOrNull()?.uppercaseChar()?.toString()
@@ -1134,6 +1138,16 @@ fun HomeScreen(
                                         color = Color.White
                                     )
                                 }
+                            }
+                            !profilePictureUri.isNullOrBlank() -> {
+                                AsyncImage(
+                                    model = profilePictureUri,
+                                    contentDescription = "User Avatar Preview",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(32.dp))
+                                )
                             }
                             else -> {
                                 val userInitial = user?.name?.firstOrNull()?.uppercaseChar()?.toString()
@@ -1213,8 +1227,9 @@ fun HomeScreen(
             }
         }
     }
-    }
 }
+}
+
 
 @Composable
 private fun ConversationRowItem(
@@ -1242,7 +1257,9 @@ private fun ConversationRowItem(
         Box(
             modifier = Modifier.size(48.dp)
         ) {
-            val isAvatarVisible = (conversation.isProfileShared || conversation.isAccepted) && !conversation.avatarUrl.isNullOrBlank()
+            val isAvatarVisible = !conversation.avatarUrl.isNullOrBlank()
+
+
             if (isAvatarVisible) {
                 val rawAvatar = conversation.avatarUrl!!
                 if (rawAvatar.startsWith("preset:")) {

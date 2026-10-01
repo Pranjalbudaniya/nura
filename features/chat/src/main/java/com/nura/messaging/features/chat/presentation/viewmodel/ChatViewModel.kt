@@ -22,6 +22,8 @@ import com.nura.messaging.domain.usecases.chat.DeleteConversationUseCase
 import com.nura.messaging.domain.usecases.chat.GetParticipantProfileUseCase
 import com.nura.messaging.domain.usecases.chat.MarkConversationAsReadUseCase
 import com.nura.messaging.domain.usecases.chat.SetActiveConversationUseCase
+import com.nura.messaging.domain.usecases.chat.SendMediaMessageUseCase
+import com.nura.messaging.domain.usecases.chat.UploadChatMediaUseCase
 import javax.inject.Inject
 
 @HiltViewModel
@@ -29,6 +31,8 @@ class ChatViewModel @Inject constructor(
     private val getMessagesUseCase: GetMessagesUseCase,
     private val getOrCreateConversationUseCase: GetOrCreateConversationUseCase,
     private val sendMessageUseCase: SendMessageUseCase,
+    private val sendMediaMessageUseCase: SendMediaMessageUseCase,
+    private val uploadChatMediaUseCase: UploadChatMediaUseCase,
     private val syncPendingMessagesUseCase: SyncPendingMessagesUseCase,
     private val observeIncomingMessagesUseCase: ObserveIncomingMessagesUseCase,
     private val retrySendMessageUseCase: RetrySendMessageUseCase,
@@ -45,6 +49,8 @@ class ChatViewModel @Inject constructor(
 
     private var messagesJob: Job? = null
     private var realtimeJob: Job? = null
+    private var recordingTimerJob: Job? = null
+
 
     fun initChat(
         conversationId: String,
@@ -200,8 +206,157 @@ class ChatViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 
+    fun toggleEmojiPicker() {
+        _uiState.update { it.copy(isEmojiPickerVisible = !it.isEmojiPickerVisible) }
+    }
+
+    fun setEmojiPickerVisible(visible: Boolean) {
+        _uiState.update { it.copy(isEmojiPickerVisible = visible) }
+    }
+
+    fun onEmojiSelected(emoji: String) {
+        _uiState.update { it.copy(inputText = it.inputText + emoji) }
+    }
+
+    fun onEmojiBackspace() {
+        _uiState.update {
+            if (it.inputText.isNotEmpty()) {
+                val length = it.inputText.length
+                val lastChar = it.inputText.last()
+                val dropCount = if (Character.isSurrogate(lastChar) && length >= 2) 2 else 1
+                it.copy(inputText = it.inputText.dropLast(dropCount))
+            } else {
+                it
+            }
+        }
+    }
+
+    fun sendMedia(bytes: ByteArray, mimeType: String, messageType: String, extension: String) {
+        val current = _uiState.value
+        if (current.conversationId.isBlank() || current.participantId.isBlank()) return
+
+        _uiState.update {
+            it.copy(
+                isUploadingMedia = true,
+                isAccepted = true,
+                isProfileShared = true
+            )
+        }
+
+        viewModelScope.launch(dispatchers.io) {
+            acceptConversationUseCase(current.conversationId)
+            markConversationAsReadUseCase(current.conversationId)
+
+            val fileName = "chat_${java.util.UUID.randomUUID()}.$extension"
+            val uploadResult = uploadChatMediaUseCase(fileName, bytes, mimeType)
+            if (uploadResult.isSuccess) {
+                val mediaUrl = uploadResult.getOrThrow()
+                val sendResult = sendMediaMessageUseCase(
+                    conversationId = current.conversationId,
+                    receiverId = current.participantId,
+                    mediaUrl = mediaUrl,
+                    messageType = messageType
+                )
+                _uiState.update { it.copy(isUploadingMedia = false) }
+                if (sendResult.isFailure) {
+                    _uiState.update { it.copy(error = sendResult.exceptionOrNull()?.message) }
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isUploadingMedia = false,
+                        error = "Failed to upload $messageType: ${uploadResult.exceptionOrNull()?.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun sendVideo(bytes: ByteArray, sizeBytes: Long, mimeType: String = "video/mp4") {
+        val maxSizeBytes = 25L * 1024L * 1024L // 25 MB strict limit
+        if (sizeBytes > maxSizeBytes || bytes.size > maxSizeBytes) {
+            _uiState.update { it.copy(error = "Videos cannot be larger than 25 MB.") }
+            return
+        }
+        sendMedia(bytes, mimeType, "video", "mp4")
+    }
+
+    fun sendPhoto(bytes: ByteArray, mimeType: String = "image/jpeg") {
+        sendMedia(bytes, mimeType, "image", "jpg")
+    }
+
+    fun sendPhotoUri(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch(dispatchers.io) {
+            try {
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+                val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                sendPhoto(bytes, mimeType)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to load photo: ${e.message}") }
+            }
+        }
+    }
+
+    fun sendVideoUri(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch(dispatchers.io) {
+            try {
+                val cursor = context.contentResolver.query(uri, null, null, null, null)
+                val size = cursor?.use {
+                    if (it.moveToFirst()) {
+                        val sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                        if (sizeIndex != -1) it.getLong(sizeIndex) else null
+                    } else null
+                } ?: 0L
+                val maxSizeBytes = 25L * 1024L * 1024L
+                if (size > maxSizeBytes) {
+                    _uiState.update { it.copy(error = "Videos cannot be larger than 25 MB.") }
+                    return@launch
+                }
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+                if (bytes.size > maxSizeBytes) {
+                    _uiState.update { it.copy(error = "Videos cannot be larger than 25 MB.") }
+                    return@launch
+                }
+                val mimeType = context.contentResolver.getType(uri) ?: "video/mp4"
+                sendVideo(bytes, size, mimeType)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to load video: ${e.message}") }
+            }
+        }
+    }
+
+    fun startRecordingAudio() {
+        recordingTimerJob?.cancel()
+        _uiState.update { it.copy(isRecordingAudio = true, recordingDurationSeconds = 0) }
+        recordingTimerJob = viewModelScope.launch(dispatchers.main) {
+            while (true) {
+                kotlinx.coroutines.delay(1000)
+                _uiState.update { it.copy(recordingDurationSeconds = it.recordingDurationSeconds + 1) }
+            }
+        }
+    }
+
+    fun cancelRecordingAudio() {
+        recordingTimerJob?.cancel()
+        recordingTimerJob = null
+        _uiState.update { it.copy(isRecordingAudio = false, recordingDurationSeconds = 0) }
+    }
+
+    fun sendVoiceNote(file: java.io.File, durationSeconds: Int = 0) {
+        recordingTimerJob?.cancel()
+        recordingTimerJob = null
+        _uiState.update { it.copy(isRecordingAudio = false, recordingDurationSeconds = 0) }
+        viewModelScope.launch(dispatchers.io) {
+            val bytes = file.readBytes()
+            sendMedia(bytes, "audio/mp4", "audio", "m4a")
+            file.delete()
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        recordingTimerJob?.cancel()
         setActiveConversationUseCase(null)
     }
 }
+

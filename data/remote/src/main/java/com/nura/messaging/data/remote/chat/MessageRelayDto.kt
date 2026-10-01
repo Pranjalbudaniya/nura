@@ -20,5 +20,43 @@ data class MessageRelayDto(
     @SerialName("created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @SerialName("delivery_status")
+    val deliveryStatus: String = "SENT_TO_SERVER",
+    @SerialName("sender_name")
+    val senderName: String? = null,
+    @SerialName("sender_avatar")
+    val senderAvatar: String? = null,
+    @SerialName("media_url")
+    val mediaUrl: String? = null
+)
+
+@Serializable
+data class MessageRelayTableDto(
+    @SerialName("message_id")
+    val messageId: String,
+    @SerialName("sender_id")
+    val senderId: String,
+    @SerialName("receiver_id")
+    val receiverId: String,
+    @SerialName("conversation_id")
+    val conversationId: String,
+    @SerialName("content")
+    val content: String,
+    @SerialName("message_type")
+    val messageType: String = "text",
+    @SerialName("created_at")
+    val createdAt: Long = System.currentTimeMillis(),
+    @SerialName("delivery_status")
     val deliveryStatus: String = "SENT_TO_SERVER"
 )
+
+fun MessageRelayDto.toTableDto(): MessageRelayTableDto = MessageRelayTableDto(
+    messageId = messageId,
+    senderId = senderId,
+    receiverId = receiverId,
+    conversationId = conversationId,
+    content = content,
+    messageType = messageType,
+    createdAt = createdAt,
+    deliveryStatus = deliveryStatus
+)
+

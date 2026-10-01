@@ -130,3 +130,28 @@ CREATE POLICY "Users can update own avatar"
 ON storage.objects FOR UPDATE
 TO authenticated
 USING (bucket_id = 'avatars');
+
+-- ------------------------------------------------------------------------------
+-- 5. Storage Bucket for Chat Media (Photos, Videos, Voice Notes)
+-- ------------------------------------------------------------------------------
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat_media', 'chat_media', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Public Chat Media Access" ON storage.objects;
+CREATE POLICY "Public Chat Media Access"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'chat_media');
+
+DROP POLICY IF EXISTS "Authenticated users can upload chat media" ON storage.objects;
+CREATE POLICY "Authenticated users can upload chat media"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'chat_media');
+
+-- Optional columns for messages_relay if desired
+ALTER TABLE public.messages_relay ADD COLUMN IF NOT EXISTS sender_name TEXT;
+ALTER TABLE public.messages_relay ADD COLUMN IF NOT EXISTS sender_avatar TEXT;
+ALTER TABLE public.messages_relay ADD COLUMN IF NOT EXISTS media_url TEXT;
+

@@ -15,8 +15,13 @@ data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val isLoading: Boolean = false,
     val isSending: Boolean = false,
+    val isUploadingMedia: Boolean = false,
     val isProfileShared: Boolean = false,
     val isRequest: Boolean = false,
     val isAccepted: Boolean = false,
+    val isEmojiPickerVisible: Boolean = false,
+    val isRecordingAudio: Boolean = false,
+    val recordingDurationSeconds: Int = 0,
     val error: String? = null
+
 )

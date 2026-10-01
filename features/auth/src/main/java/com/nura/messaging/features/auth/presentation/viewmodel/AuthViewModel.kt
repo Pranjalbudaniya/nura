@@ -94,23 +94,32 @@ class AuthViewModel @Inject constructor(
             val localPic = if (user != null && user.id.isNotBlank()) {
                 getLocalProfilePictureUseCase(user.id)
             } else null
-            val presetIndex = if (user != null && user.id.isNotBlank()) {
-                getUserPresetIndexUseCase(user.id)
+            val remoteAvatar = user?.avatarUrl
+            val resolvedPresetIndex = if (remoteAvatar?.startsWith("preset:") == true) {
+                remoteAvatar.removePrefix("preset:").toIntOrNull()
             } else null
-            val presetColor = if (user != null && user.id.isNotBlank()) {
-                getUserPresetColorUseCase(user.id)
+
+            val resolvedPresetColor = if (remoteAvatar?.startsWith("color:") == true) {
+                remoteAvatar.removePrefix("color:").toLongOrNull()
             } else null
+
+            val resolvedPic = when {
+                remoteAvatar?.startsWith("http") == true || remoteAvatar?.startsWith("data:") == true -> remoteAvatar
+                localPic != null && !localPic.startsWith("preset:") && !localPic.startsWith("color:") -> localPic
+                else -> null
+            }
 
             _uiState.update {
                 it.copy(
                     currentUser = user,
-                    profilePictureUri = localPic ?: it.profilePictureUri,
-                    selectedPresetIndex = presetIndex ?: it.selectedPresetIndex,
-                    selectedPresetColor = presetColor ?: it.selectedPresetColor,
+                    profilePictureUri = resolvedPic ?: it.profilePictureUri,
+                    selectedPresetIndex = resolvedPresetIndex ?: it.selectedPresetIndex,
+                    selectedPresetColor = resolvedPresetColor ?: it.selectedPresetColor,
                     isInitialSessionChecking = false,
                     isNewUserRegistration = user != null && !isOnboarded
                 )
             }
+
             if (user != null) {
                 if (isOnboarded) {
                     _uiEvents.emit(AuthUiEvent.NavigateToHome)
@@ -127,20 +136,30 @@ class AuthViewModel @Inject constructor(
                 val localPic = if (user != null && user.id.isNotBlank()) {
                     getLocalProfilePictureUseCase(user.id)
                 } else null
-                val presetIndex = if (user != null && user.id.isNotBlank()) {
-                    getUserPresetIndexUseCase(user.id)
+                val remoteAvatar = user?.avatarUrl
+                val resolvedPresetIndex = if (remoteAvatar?.startsWith("preset:") == true) {
+                    remoteAvatar.removePrefix("preset:").toIntOrNull()
                 } else null
-                val presetColor = if (user != null && user.id.isNotBlank()) {
-                    getUserPresetColorUseCase(user.id)
+
+                val resolvedPresetColor = if (remoteAvatar?.startsWith("color:") == true) {
+                    remoteAvatar.removePrefix("color:").toLongOrNull()
                 } else null
+
+                val resolvedPic = when {
+                    remoteAvatar?.startsWith("http") == true || remoteAvatar?.startsWith("data:") == true -> remoteAvatar
+                    localPic != null && !localPic.startsWith("preset:") && !localPic.startsWith("color:") -> localPic
+                    else -> null
+                }
+
                 _uiState.update {
                     it.copy(
                         currentUser = user,
-                        profilePictureUri = localPic ?: it.profilePictureUri,
-                        selectedPresetIndex = presetIndex ?: it.selectedPresetIndex,
-                        selectedPresetColor = presetColor ?: it.selectedPresetColor
+                        profilePictureUri = resolvedPic ?: it.profilePictureUri,
+                        selectedPresetIndex = resolvedPresetIndex ?: it.selectedPresetIndex,
+                        selectedPresetColor = resolvedPresetColor ?: it.selectedPresetColor
                     )
                 }
+
             }
         }
     }
@@ -737,11 +756,12 @@ class AuthViewModel @Inject constructor(
             val presetIdx = _uiState.value.selectedPresetIndex
             val presetColor = _uiState.value.selectedPresetColor
             val avatarUrl = when {
-                !pic.isNullOrBlank() -> processAndUploadAvatar(current.id, pic)
                 presetIdx != null -> "preset:$presetIdx"
                 presetColor != null -> "color:$presetColor"
+                !pic.isNullOrBlank() && !pic.startsWith("preset:") && !pic.startsWith("color:") -> processAndUploadAvatar(current.id, pic)
                 else -> null
             }
+
             updateProfileUseCase(name, about, avatarUrl)
             if (avatarUrl != null) {
                 _uiState.update { state ->

@@ -22,6 +22,14 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -31,19 +39,45 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.SentimentSatisfiedAlt
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.core.content.ContextCompat
+import com.nura.messaging.features.chat.presentation.components.EmojiPickerSection
+import com.nura.messaging.features.chat.presentation.util.AudioPlayerHelper
+import com.nura.messaging.features.chat.presentation.util.AudioRecorderHelper
+import com.nura.messaging.features.chat.presentation.util.PlaybackState
+import java.io.File
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -112,6 +146,7 @@ fun ChatScreen(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChatScreenContent(
     viewModel: ChatViewModel,
@@ -122,6 +157,70 @@ private fun ChatScreenContent(
     val colors = NuraTheme.colors
     val colorScheme = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    val audioRecorder = remember { AudioRecorderHelper(context) }
+    val audioPlayer = remember { AudioPlayerHelper() }
+    val playbackState by audioPlayer.playbackState.collectAsStateWithLifecycle()
+
+    var showAttachmentSheet by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            audioRecorder.release()
+            audioPlayer.release()
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.sendPhotoUri(context, it) }
+    }
+
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.sendVideoUri(context, it) }
+    }
+
+    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val audioFile = audioRecorder.startRecording()
+            if (audioFile != null) {
+                viewModel.startRecordingAudio()
+            }
+        }
+    }
+
+    val startRecordingAction = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            val audioFile = audioRecorder.startRecording()
+            if (audioFile != null) {
+                viewModel.startRecordingAudio()
+            }
+        } else {
+            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    val cancelRecordingAction = {
+        audioRecorder.cancelRecording()
+        viewModel.cancelRecordingAudio()
+    }
+
+    val sendVoiceNoteAction = {
+        val duration = uiState.recordingDurationSeconds
+        val audioFile = audioRecorder.stopRecording()
+        if (audioFile != null && duration > 0) {
+            viewModel.sendVoiceNote(audioFile, duration)
+        } else {
+            viewModel.cancelRecordingAudio()
+        }
+    }
 
     // Auto-scroll to bottom on new message
     LaunchedEffect(uiState.messages.size) {
@@ -162,8 +261,9 @@ private fun ChatScreenContent(
                     .border(1.dp, colors.badgeBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if ((uiState.isProfileShared || uiState.isAccepted) && !uiState.participantAvatarUrl.isNullOrBlank()) {
+                if (!uiState.participantAvatarUrl.isNullOrBlank()) {
                     val rawAvatar = uiState.participantAvatarUrl!!
+
                     if (rawAvatar.startsWith("preset:")) {
                         val idx = rawAvatar.removePrefix("preset:").toIntOrNull()
                         if (idx != null) {
@@ -301,6 +401,8 @@ private fun ChatScreenContent(
                 items(uiState.messages, key = { it.id }) { message ->
                     MessageBubble(
                         message = message,
+                        playbackState = playbackState,
+                        onPlayAudio = { id, url -> audioPlayer.togglePlayPause(id, url) },
                         onRetry = { viewModel.retryMessage(message.id) }
                     )
                 }
@@ -314,6 +416,32 @@ private fun ChatScreenContent(
             }
         }
 
+        // Media Uploading Banner
+        AnimatedVisibility(visible = uiState.isUploadingMedia) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.badgeBackground)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    color = colors.terracottaAccent,
+                    strokeWidth = 2.dp
+                )
+                Text(
+                    text = "Uploading media...",
+                    fontFamily = PlusJakartaSansFamily,
+                    fontSize = 12.sp,
+                    color = colors.subtitleText
+                )
+            }
+        }
+
         // Message Request Accept/Reject Banner or Bottom Input Bar
         if (uiState.isRequest && !uiState.isAccepted) {
             MessageRequestBanner(
@@ -322,77 +450,342 @@ private fun ChatScreenContent(
                 onReject = { viewModel.rejectRequest(onRejected = onBack) }
             )
         } else {
-            // Bottom Input Bar (with stabilized height to prevent shrinking on typing first letter)
-            Row(
+            if (uiState.isRecordingAudio) {
+                // Audio recording bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(
+                        onClick = cancelRecordingAction,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(colors.badgeBackground)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Cancel Recording",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(colors.inputBackground)
+                            .border(1.dp, colors.inputBorder, RoundedCornerShape(24.dp))
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(colors.terracottaAccent)
+                        )
+                        val mins = uiState.recordingDurationSeconds / 60
+                        val secs = uiState.recordingDurationSeconds % 60
+                        Text(
+                            text = String.format(Locale.getDefault(), "%02d:%02d", mins, secs),
+                            fontFamily = PlusJakartaSansFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = colors.brandLogoText
+                        )
+                        Text(
+                            text = "Recording...",
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 12.sp,
+                            color = colors.subtitleText
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(colors.terracottaAccent)
+                            .clickable(onClick = sendVoiceNoteAction),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send Voice Note",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            } else {
+                // Bottom Input Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(colors.inputBackground)
+                            .border(1.dp, colors.inputBorder, RoundedCornerShape(24.dp))
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Emoji Picker toggle button
+                        IconButton(
+                            onClick = {
+                                if (!uiState.isEmojiPickerVisible) {
+                                    keyboardController?.hide()
+                                }
+                                viewModel.toggleEmojiPicker()
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.isEmojiPickerVisible) Icons.Outlined.Keyboard else Icons.Outlined.SentimentSatisfiedAlt,
+                                contentDescription = "Emoji Picker",
+                                tint = if (uiState.isEmojiPickerVisible) colors.terracottaAccent else colors.subtitleText,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        BasicTextField(
+                            value = uiState.inputText,
+                            onValueChange = {
+                                if (uiState.isEmojiPickerVisible) {
+                                    viewModel.setEmojiPickerVisible(false)
+                                }
+                                viewModel.onInputTextChanged(it)
+                            },
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontFamily = PlusJakartaSansFamily,
+                                fontSize = 15.sp,
+                                color = colors.brandLogoText,
+                                lineHeight = 20.sp
+                            ),
+                            cursorBrush = SolidColor(colors.terracottaAccent),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 4.dp),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (uiState.inputText.isEmpty()) {
+                                        Text(
+                                            text = "Message...",
+                                            fontFamily = PlusJakartaSansFamily,
+                                            fontSize = 15.sp,
+                                            color = colors.subtitleText,
+                                            lineHeight = 20.sp
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            }
+                        )
+
+                        // Attachment button
+                        IconButton(
+                            onClick = {
+                                if (uiState.isEmojiPickerVisible) {
+                                    viewModel.setEmojiPickerVisible(false)
+                                }
+                                showAttachmentSheet = true
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AttachFile,
+                                contentDescription = "Attach Media",
+                                tint = colors.subtitleText,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    // Dynamic Send / Mic Button
+                    if (uiState.inputText.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(colors.terracottaAccent)
+                                .clickable(
+                                    enabled = !uiState.isSending,
+                                    onClick = {
+                                        if (uiState.isEmojiPickerVisible) {
+                                            viewModel.setEmojiPickerVisible(false)
+                                        }
+                                        viewModel.sendMessage()
+                                    }
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(colors.terracottaAccent)
+                                .clickable(onClick = startRecordingAction),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Mic,
+                                contentDescription = "Record Voice Note",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // WhatsApp-style Google Emoji Picker
+        AnimatedVisibility(visible = uiState.isEmojiPickerVisible) {
+            EmojiPickerSection(
+                onEmojiSelected = viewModel::onEmojiSelected,
+                onBackspace = viewModel::onEmojiBackspace,
+                modifier = Modifier.height(260.dp)
+            )
+        }
+    }
+
+    if (showAttachmentSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showAttachmentSheet = false },
+            containerColor = colors.cardDarkBubble,
+            contentColor = colors.brandLogoText
+        ) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Box(
+                Text(
+                    text = "Share media",
+                    fontFamily = PlusJakartaSansFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    color = colors.brandLogoText
+                )
+
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(colors.inputBackground)
-                        .border(1.dp, colors.inputBorder, RoundedCornerShape(24.dp))
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    BasicTextField(
-                        value = uiState.inputText,
-                        onValueChange = viewModel::onInputTextChanged,
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            fontFamily = PlusJakartaSansFamily,
-                            fontSize = 15.sp,
-                            color = colors.brandLogoText,
-                            lineHeight = 20.sp
-                        ),
-                        cursorBrush = SolidColor(colors.terracottaAccent),
-                        modifier = Modifier.fillMaxWidth(),
-                        decorationBox = { innerTextField ->
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                if (uiState.inputText.isEmpty()) {
-                                    Text(
-                                        text = "Message...",
-                                        fontFamily = PlusJakartaSansFamily,
-                                        fontSize = 15.sp,
-                                        color = colors.subtitleText,
-                                        lineHeight = 20.sp
-                                    )
-                                }
-                                innerTextField()
-                            }
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.badgeBackground)
+                        .clickable {
+                            showAttachmentSheet = false
+                            photoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
                         }
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Send Button
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (uiState.inputText.isNotBlank()) colors.terracottaAccent else colors.badgeBackground
-                        )
-                        .clickable(
-                            enabled = uiState.inputText.isNotBlank() && !uiState.isSending,
-                            onClick = viewModel::sendMessage
-                        ),
-                    contentAlignment = Alignment.Center
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = if (uiState.inputText.isNotBlank()) Color.White else colors.subtitleText,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(colors.terracottaAccent.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Image,
+                            contentDescription = "Photo",
+                            tint = colors.terracottaAccent,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Photo",
+                            fontFamily = PlusJakartaSansFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp,
+                            color = colors.brandLogoText
+                        )
+                        Text(
+                            text = "Send an image in full quality",
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 12.sp,
+                            color = colors.subtitleText
+                        )
+                    }
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.badgeBackground)
+                        .clickable {
+                            showAttachmentSheet = false
+                            videoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                            )
+                        }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(colors.terracottaAccent.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Videocam,
+                            contentDescription = "Video",
+                            tint = colors.terracottaAccent,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Video (Max 25 MB)",
+                            fontFamily = PlusJakartaSansFamily,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 16.sp,
+                            color = colors.brandLogoText
+                        )
+                        Text(
+                            text = "Send a video up to 25 MB",
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 12.sp,
+                            color = colors.subtitleText
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -432,7 +825,9 @@ private fun SquareProfileHeaderCard(
                     .border(2.dp, colors.badgeBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                if (isProfileShared && !avatarUrl.isNullOrBlank()) {
+                if (!avatarUrl.isNullOrBlank()) {
+
+
                     if (avatarUrl.startsWith("preset:")) {
                         val idx = avatarUrl.removePrefix("preset:").toIntOrNull()
                         if (idx != null) {
@@ -625,6 +1020,8 @@ private fun MessageRequestBanner(
 @Composable
 private fun MessageBubble(
     message: ChatMessage,
+    playbackState: PlaybackState,
+    onPlayAudio: (messageId: String, audioUrl: String) -> Unit,
     onRetry: () -> Unit
 ) {
     val colors = NuraTheme.colors
@@ -661,14 +1058,132 @@ private fun MessageBubble(
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(
-                text = message.content,
-                fontFamily = PlusJakartaSansFamily,
-                fontWeight = FontWeight.Normal,
-                fontSize = 15.sp,
-                color = if (message.isOutgoing) colors.brandLogoText else Color.White,
-                lineHeight = 20.sp
-            )
+            when (message.messageType) {
+                "image" -> {
+                    AsyncImage(
+                        model = message.content,
+                        contentDescription = "Image message",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 240.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                }
+                "video" -> {
+                    val context = LocalContext.current
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.8f))
+                            .clickable {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(Uri.parse(message.content), "video/*")
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = "Play video",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Text(
+                            text = "▶ Video",
+                            fontFamily = PlusJakartaSansFamily,
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(8.dp)
+                        )
+                    }
+                }
+                "audio" -> {
+                    val isCurrentAudio = playbackState.playingMessageId == message.id
+                    val isPlaying = isCurrentAudio && playbackState.isPlaying
+                    val progress = if (isCurrentAudio && playbackState.durationMs > 0) {
+                        (playbackState.currentPositionMs.toFloat() / playbackState.durationMs.toFloat()).coerceIn(0f, 1f)
+                    } else 0f
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (message.isOutgoing) colors.terracottaAccent else Color.White)
+                                .clickable { onPlayAudio(message.id, message.content) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = if (message.isOutgoing) Color.White else colors.terracottaAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = if (message.isOutgoing) colors.terracottaAccent else Color.White,
+                                trackColor = if (message.isOutgoing) colors.badgeBorder else Color.White.copy(alpha = 0.3f)
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            val timeText = if (isCurrentAudio && playbackState.durationMs > 0) {
+                                val curSecs = playbackState.currentPositionMs / 1000
+                                val totSecs = playbackState.durationMs / 1000
+                                String.format(Locale.getDefault(), "%02d:%02d / %02d:%02d", curSecs / 60, curSecs % 60, totSecs / 60, totSecs % 60)
+                            } else {
+                                "Voice Note"
+                            }
+                            Text(
+                                text = timeText,
+                                fontFamily = PlusJakartaSansFamily,
+                                fontSize = 10.sp,
+                                color = if (message.isOutgoing) colors.subtitleText else Color.White.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    Text(
+                        text = message.content,
+                        fontFamily = PlusJakartaSansFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 15.sp,
+                        color = if (message.isOutgoing) colors.brandLogoText else Color.White,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
