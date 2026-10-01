@@ -139,6 +139,35 @@ class ChatUseCasesTest {
             return Result.success(msg)
         }
 
+        override suspend fun sendMediaMessage(
+            conversationId: String,
+            receiverId: String,
+            mediaUrl: String,
+            messageType: String,
+            caption: String
+        ): Result<ChatMessage> {
+            val msg = ChatMessage(
+                id = "m_${System.currentTimeMillis()}",
+                conversationId = conversationId,
+                senderId = "user_1",
+                receiverId = receiverId,
+                content = mediaUrl,
+                status = MessageStatus.SENT,
+                isOutgoing = true,
+                messageType = messageType
+            )
+            messagesList.add(msg)
+            return Result.success(msg)
+        }
+
+        override suspend fun uploadChatMedia(
+            fileName: String,
+            fileBytes: ByteArray,
+            mimeType: String
+        ): Result<String> {
+            return Result.success("https://fake.url/$fileName")
+        }
+
         override suspend fun retrySendMessage(messageId: String): Result<Unit> {
             return Result.success(Unit)
         }

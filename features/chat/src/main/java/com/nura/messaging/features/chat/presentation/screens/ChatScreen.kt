@@ -72,7 +72,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.core.content.ContextCompat
+import com.nura.messaging.features.chat.presentation.components.ChatImageCropDialog
 import com.nura.messaging.features.chat.presentation.components.EmojiPickerSection
+import com.nura.messaging.features.chat.presentation.components.InAppMediaViewer
 import com.nura.messaging.features.chat.presentation.util.AudioPlayerHelper
 import com.nura.messaging.features.chat.presentation.util.AudioRecorderHelper
 import com.nura.messaging.features.chat.presentation.util.PlaybackState
@@ -100,6 +102,13 @@ import com.nura.messaging.features.chat.presentation.viewmodel.ChatViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private data class ViewingMediaItem(
+    val mediaUrl: String,
+    val mediaType: String,
+    val senderName: String,
+    val timestamp: Long
+)
 
 @Composable
 fun ChatScreen(
@@ -165,6 +174,8 @@ private fun ChatScreenContent(
     val playbackState by audioPlayer.playbackState.collectAsStateWithLifecycle()
 
     var showAttachmentSheet by remember { mutableStateOf(false) }
+    var pendingCropImageUri by remember { mutableStateOf<Uri?>(null) }
+    var viewingMediaItem by remember { mutableStateOf<ViewingMediaItem?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -176,7 +187,9 @@ private fun ChatScreenContent(
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
-        uri?.let { viewModel.sendPhotoUri(context, it) }
+        if (uri != null) {
+            pendingCropImageUri = uri
+        }
     }
 
     val videoPickerLauncher = rememberLauncherForActivityResult(
@@ -402,7 +415,16 @@ private fun ChatScreenContent(
                     MessageBubble(
                         message = message,
                         playbackState = playbackState,
+                        participantName = uiState.participantName,
                         onPlayAudio = { id, url -> audioPlayer.togglePlayPause(id, url) },
+                        onMediaClick = { url, type, sender, ts ->
+                            viewingMediaItem = ViewingMediaItem(
+                                mediaUrl = url,
+                                mediaType = type,
+                                senderName = sender,
+                                timestamp = ts
+                            )
+                        },
                         onRetry = { viewModel.retryMessage(message.id) }
                     )
                 }
@@ -789,6 +811,28 @@ private fun ChatScreenContent(
             }
         }
     }
+
+    if (pendingCropImageUri != null) {
+        ChatImageCropDialog(
+            sourceUri = pendingCropImageUri!!,
+            onDismiss = { pendingCropImageUri = null },
+            onCropConfirmed = { croppedBytes ->
+                viewModel.sendPhoto(croppedBytes)
+                pendingCropImageUri = null
+            }
+        )
+    }
+
+    if (viewingMediaItem != null) {
+        val media = viewingMediaItem!!
+        InAppMediaViewer(
+            mediaUrl = media.mediaUrl,
+            mediaType = media.mediaType,
+            senderName = media.senderName,
+            timestamp = media.timestamp,
+            onDismiss = { viewingMediaItem = null }
+        )
+    }
 }
 
 @Composable
@@ -1021,12 +1065,15 @@ private fun MessageRequestBanner(
 private fun MessageBubble(
     message: ChatMessage,
     playbackState: PlaybackState,
+    participantName: String,
     onPlayAudio: (messageId: String, audioUrl: String) -> Unit,
+    onMediaClick: (mediaUrl: String, mediaType: String, senderName: String, timestamp: Long) -> Unit,
     onRetry: () -> Unit
 ) {
     val colors = NuraTheme.colors
     val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
     val formattedTime = timeFormat.format(Date(message.timestamp))
+    val senderName = if (message.isOutgoing) "You" else participantName.ifBlank { "User" }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1068,10 +1115,12 @@ private fun MessageBubble(
                             .fillMaxWidth()
                             .heightIn(max = 240.dp)
                             .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onMediaClick(message.content, "image", senderName, message.timestamp)
+                            }
                     )
                 }
                 "video" -> {
-                    val context = LocalContext.current
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1079,13 +1128,7 @@ private fun MessageBubble(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.Black.copy(alpha = 0.8f))
                             .clickable {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(Uri.parse(message.content), "video/*")
-                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    }
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {}
+                                onMediaClick(message.content, "video", senderName, message.timestamp)
                             },
                         contentAlignment = Alignment.Center
                     ) {
