@@ -110,3 +110,13 @@ class GetCurrentUserUseCase @Inject constructor(
     }
 }
 
+class UpdateProfileUseCase @Inject constructor(
+    private val repository: AuthRepository
+) {
+    suspend operator fun invoke(name: String, about: String): Result<AuthUser> {
+        val trimmedName = name.trim()
+        val trimmedAbout = about.trim().ifEmpty { "HI there i'm using nura" }
+        return repository.updateProfile(trimmedName, trimmedAbout)
+    }
+}
+

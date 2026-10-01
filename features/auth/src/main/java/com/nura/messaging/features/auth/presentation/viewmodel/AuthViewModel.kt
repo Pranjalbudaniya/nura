@@ -38,6 +38,7 @@ import com.nura.messaging.domain.usecases.contacts.SaveUserPresetAvatarUseCase
 import com.nura.messaging.domain.usecases.contacts.SaveUserPresetColorUseCase
 import com.nura.messaging.domain.usecases.contacts.GetUserPresetIndexUseCase
 import com.nura.messaging.domain.usecases.contacts.GetUserPresetColorUseCase
+import com.nura.messaging.domain.usecases.auth.UpdateProfileUseCase
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
@@ -59,7 +60,8 @@ class AuthViewModel @Inject constructor(
     private val saveUserPresetAvatarUseCase: SaveUserPresetAvatarUseCase,
     private val saveUserPresetColorUseCase: SaveUserPresetColorUseCase,
     private val getUserPresetIndexUseCase: GetUserPresetIndexUseCase,
-    private val getUserPresetColorUseCase: GetUserPresetColorUseCase
+    private val getUserPresetColorUseCase: GetUserPresetColorUseCase,
+    private val updateProfileUseCase: UpdateProfileUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -681,10 +683,17 @@ class AuthViewModel @Inject constructor(
         _uiState.update { it.copy(isNewUserRegistration = false) }
     }
 
-    fun updateUserName(name: String) {
+    fun saveUserProfile(name: String, about: String) {
         val current = _uiState.value.currentUser ?: return
-        val updated = current.copy(name = name)
+        val updated = current.copy(name = name, about = about)
         _uiState.update { it.copy(currentUser = updated) }
+        viewModelScope.launch(dispatchers.io) {
+            updateProfileUseCase(name, about)
+        }
+    }
+
+    fun updateUserName(name: String) {
+        saveUserProfile(name, _uiState.value.currentUser?.about ?: "HI there i'm using nura")
     }
 
     fun setOtpMode(enabled: Boolean) {

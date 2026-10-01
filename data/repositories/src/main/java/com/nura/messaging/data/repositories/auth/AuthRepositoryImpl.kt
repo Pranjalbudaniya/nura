@@ -118,6 +118,12 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun updateProfile(name: String, about: String): Result<AuthUser> = runCatching {
+        val current = remoteDataSource.getCurrentUser() ?: throw IllegalStateException("Not authenticated")
+        val updated = remoteDataSource.updateProfile(current.id, name, about)
+        (updated ?: current).toDomain().copy(name = name, about = about)
+    }.mapFailure()
+
     private fun UserInfo.toDomain(): AuthUser {
         val fullName = userMetadata?.get("full_name")?.jsonPrimitive?.content
             ?: userMetadata?.get("display_name")?.jsonPrimitive?.content
@@ -125,12 +131,15 @@ class AuthRepositoryImpl @Inject constructor(
             ?: ""
         val username = userMetadata?.get("username")?.jsonPrimitive?.content
             ?: ""
+        val aboutText = userMetadata?.get("about")?.jsonPrimitive?.content
+            ?: "HI there i'm using nura"
 
         return AuthUser(
             id = id,
             email = email ?: "",
             name = fullName,
             username = username,
+            about = aboutText,
             isEmailVerified = emailConfirmedAt != null,
             createdAt = System.currentTimeMillis()
         )

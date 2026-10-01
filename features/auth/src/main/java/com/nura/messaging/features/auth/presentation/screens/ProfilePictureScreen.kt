@@ -111,93 +111,33 @@ fun ProfilePictureScreen(
         uri?.let { imageToCropUriString = it.toString() }
     }
 
+    // Clean, robust camera launcher
     val takePictureLauncher = rememberLauncherForActivityResult(
-        contract = remember {
-            object : ActivityResultContract<Uri, Triple<Boolean, Bitmap?, Uri?>?>() {
-                override fun createIntent(ctx: Context, input: Uri): Intent {
-                    val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-                        .putExtra(MediaStore.EXTRA_OUTPUT, input)
-                        .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-
-                    try {
-                        intent.clipData = ClipData.newUri(ctx.contentResolver, "camera_photo", input)
-                    } catch (_: Exception) {}
-
-                    try {
-                        val resolved = ctx.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                        for (info in resolved) {
-                            ctx.grantUriPermission(
-                                info.activityInfo.packageName,
-                                input,
-                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            )
-                        }
-                    } catch (_: Exception) {}
-
-                    return intent
-                }
-
-                override fun parseResult(resultCode: Int, intent: Intent?): Triple<Boolean, Bitmap?, Uri?>? {
-                    if (resultCode != Activity.RESULT_OK) return null
-                    val bitmap = intent?.extras?.get("data") as? Bitmap
-                        ?: (intent?.getParcelableExtra("data") as? Bitmap)
-                    val dataUri = intent?.data
-                    return Triple(true, bitmap, dataUri)
-                }
-            }
-        }
-    ) { result ->
-        if (result == null) return@rememberLauncherForActivityResult
-        val (_, returnedBitmap, returnedUri) = result
-        val savedPath = tempCameraFilePath
-        val file = if (!savedPath.isNullOrBlank()) File(savedPath) else null
-
-        // 1. If camera returned bitmap directly (common for selfies / front camera), write to file
-        if (returnedBitmap != null && file != null) {
-            try {
-                FileOutputStream(file).use { out ->
-                    returnedBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
-                }
-            } catch (_: Exception) {}
-        }
-
-        // 2. If camera returned content URI, copy into file
-        if (returnedUri != null && file != null && (!file.exists() || file.length() == 0L)) {
-            try {
-                context.contentResolver.openInputStream(returnedUri)?.use { input ->
-                    FileOutputStream(file).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-
-        // 3. Confirm file has data and set for crop dialog
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        val path = tempCameraFilePath
+        val file = if (!path.isNullOrBlank()) File(path) else null
         val fileHasData = file != null && file.exists() && file.length() > 0L
-        when {
-            fileHasData && file != null -> {
+
+        if (success || fileHasData) {
+            if (file != null && file.exists() && file.length() > 0L) {
                 imageToCropUriString = Uri.fromFile(file).toString()
-            }
-            returnedUri != null -> {
-                imageToCropUriString = returnedUri.toString()
-            }
-            !tempCameraUriString.isNullOrBlank() -> {
+            } else if (!tempCameraUriString.isNullOrBlank()) {
                 imageToCropUriString = tempCameraUriString
             }
-            else -> {
-                Toast.makeText(context, "Could not load captured photo. Please try again.", Toast.LENGTH_SHORT).show()
-            }
+        } else {
+            Toast.makeText(context, "No photo captured. Please try again.", Toast.LENGTH_SHORT).show()
         }
     }
 
     val launchCameraDirectly = {
         try {
-            val baseDir = context.externalCacheDir ?: context.cacheDir
-            val cameraDir = File(baseDir, "camera_photos").apply { mkdirs() }
+            val cameraDir = File(context.cacheDir, "camera_photos").apply { mkdirs() }
             val photoFile = File(cameraDir, "camera_avatar_${System.currentTimeMillis()}.jpg")
-            if (!photoFile.exists()) {
-                photoFile.createNewFile()
+            if (photoFile.exists()) {
+                photoFile.delete()
             }
+            photoFile.createNewFile()
             tempCameraFilePath = photoFile.absolutePath
             val uri = FileProvider.getUriForFile(
                 context,

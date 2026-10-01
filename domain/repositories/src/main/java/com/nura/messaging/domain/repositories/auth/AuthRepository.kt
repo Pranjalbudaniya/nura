@@ -18,4 +18,5 @@ interface AuthRepository {
     suspend fun getCurrentUser(): AuthUser?
     fun observeAuthState(): Flow<AuthUser?>
     suspend fun handleDeepLink(uriString: String): Boolean
+    suspend fun updateProfile(name: String, about: String): Result<AuthUser>
 }

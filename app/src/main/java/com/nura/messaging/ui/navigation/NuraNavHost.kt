@@ -98,22 +98,8 @@ fun NuraNavHost(
         }
     }
 
-    // Cold start gate: prevent flashing while session is being verified
+    // Cold start gate: hold until session is checked without showing redundant splash
     if (uiState.isInitialSessionChecking) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                NuraBrandIcon(size = 96.dp)
-                Spacer(modifier = Modifier.height(20.dp))
-                NuraWordmark(fontSize = 24.sp)
-            }
-        }
         return
     }
 
@@ -466,8 +452,8 @@ fun NuraNavHost(
                 onUpdateProfilePicture = { uri ->
                     authViewModel.onProfilePictureSelected(uri)
                 },
-                onSaveProfile = { name, _ ->
-                    authViewModel.updateUserName(name)
+                onSaveProfile = { name, about ->
+                    authViewModel.saveUserProfile(name, about)
                 },
                 onNavigateBack = {
                     navController.popBackStack()

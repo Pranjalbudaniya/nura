@@ -66,6 +66,16 @@ private val DarkOnError = Color(0xFF690005)
 private val DarkErrorContainer = Color(0xFF93000A)
 private val DarkOnErrorContainer = Color(0xFFFFDAD6)
 
+// Predefined Theme Accent Palettes
+val RadiantTerracottaLight = Color(0xFFA43716)
+val RadiantTerracottaDark = Color(0xFFE86E4A)
+val AlpineEmeraldLight = Color(0xFF1E6B47)
+val AlpineEmeraldDark = Color(0xFF34A870)
+val NordicCobaltLight = Color(0xFF2B5B9E)
+val NordicCobaltDark = Color(0xFF4D88DB)
+val RoyalAmethystLight = Color(0xFF6B43A6)
+val RoyalAmethystDark = Color(0xFF9B6FE3)
+
 // Stitch Custom Brand & Input Semantic Tokens
 @Immutable
 data class NuraColorTokens(

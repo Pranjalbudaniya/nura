@@ -8,6 +8,7 @@ data class AuthUser(
     val email: String,
     val name: String = "",
     val username: String = "",
+    val about: String = "HI there i'm using nura",
     val isEmailVerified: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

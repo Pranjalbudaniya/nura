@@ -88,7 +88,8 @@ class AuthViewModelTest {
             saveUserPresetAvatarUseCase = com.nura.messaging.domain.usecases.contacts.SaveUserPresetAvatarUseCase(fakeContactsRepository),
             saveUserPresetColorUseCase = com.nura.messaging.domain.usecases.contacts.SaveUserPresetColorUseCase(fakeContactsRepository),
             getUserPresetIndexUseCase = com.nura.messaging.domain.usecases.contacts.GetUserPresetIndexUseCase(fakeContactsRepository),
-            getUserPresetColorUseCase = com.nura.messaging.domain.usecases.contacts.GetUserPresetColorUseCase(fakeContactsRepository)
+            getUserPresetColorUseCase = com.nura.messaging.domain.usecases.contacts.GetUserPresetColorUseCase(fakeContactsRepository),
+            updateProfileUseCase = com.nura.messaging.domain.usecases.auth.UpdateProfileUseCase(fakeRepository)
         )
     }
 
@@ -412,6 +413,9 @@ class AuthViewModelTest {
         override fun observeAuthState(): Flow<AuthUser?> = flowOf(null)
 
         override suspend fun handleDeepLink(uriString: String): Boolean = true
+
+        override suspend fun updateProfile(name: String, about: String): Result<AuthUser> =
+            Result.success(AuthUser("user_123", "user@nura.chat", name, about = about, isEmailVerified = true))
     }
 
     private class FakeContactsRepository : com.nura.messaging.domain.repositories.contacts.ContactsRepository {

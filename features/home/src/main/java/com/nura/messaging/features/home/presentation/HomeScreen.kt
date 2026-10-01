@@ -107,7 +107,8 @@ import kotlinx.coroutines.launch
 
 enum class HomeFilterTab {
     ALL,
-    UNREAD
+    UNREAD,
+    REQUESTS
 }
 
 data class HomeConversationItem(
@@ -161,16 +162,23 @@ fun HomeScreen(
     var showAccountSheet by remember { mutableStateOf(false) }
     var showFullAvatarPreview by remember { mutableStateOf(false) }
 
-    // Count of distinct conversations that have unread messages
+    // Count of distinct conversations that have unread messages (excluding incoming requests)
     val unreadPeopleCount = remember(conversations) {
-        conversations.count { it.unreadCount > 0 }
+        conversations.count { it.unreadCount > 0 && !(!it.isProfileShared && !it.isOutgoing) }
+    }
+
+    // Count of first incoming message requests
+    val requestsCount = remember(conversations) {
+        conversations.count { !it.isProfileShared && !it.isOutgoing }
     }
 
     val filteredConversations = remember(conversations, selectedFilter, searchQuery) {
         conversations.filter { item ->
+            val isRequest = !item.isProfileShared && !item.isOutgoing
             val matchesFilter = when (selectedFilter) {
-                HomeFilterTab.ALL -> true
-                HomeFilterTab.UNREAD -> item.unreadCount > 0
+                HomeFilterTab.ALL -> !isRequest
+                HomeFilterTab.UNREAD -> item.unreadCount > 0 && !isRequest
+                HomeFilterTab.REQUESTS -> isRequest
             }
             val matchesSearch = if (searchQuery.isBlank()) {
                 true
@@ -437,6 +445,51 @@ fun HomeScreen(
                             }
                         }
                     }
+
+                    // "Requests" tab
+                    val isRequestsSelected = selectedFilter == HomeFilterTab.REQUESTS
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (isRequestsSelected) colors.terracottaAccent else colorScheme.surfaceContainerLow)
+                            .clickable { selectedFilter = HomeFilterTab.REQUESTS }
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Requests",
+                                fontFamily = PlusJakartaSansFamily,
+                                fontWeight = if (isRequestsSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                fontSize = 13.sp,
+                                color = if (isRequestsSelected) Color.White else colorScheme.onSurfaceVariant
+                            )
+                            if (requestsCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .height(18.dp)
+                                        .widthIn(min = 18.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isRequestsSelected) Color.White.copy(alpha = 0.25f) else colors.terracottaAccent)
+                                        .padding(horizontal = 5.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "$requestsCount",
+                                        fontFamily = PlusJakartaSansFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        lineHeight = 10.sp,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Conversations List Feed OR Connect With People Empty State
@@ -490,8 +543,19 @@ fun HomeScreen(
 
                             Spacer(modifier = Modifier.height(20.dp))
 
+                            val emptyTitle = if (selectedFilter == HomeFilterTab.REQUESTS) {
+                                "No message requests"
+                            } else {
+                                "Connect with people"
+                            }
+                            val emptySubtitle = if (selectedFilter == HomeFilterTab.REQUESTS) {
+                                "When someone sends you a message for the first time, it will appear here."
+                            } else {
+                                "Start a new conversation or invite friends with your Nura key to begin messaging securely."
+                            }
+
                             Text(
-                                text = "Connect with people",
+                                text = emptyTitle,
                                 fontFamily = PlusJakartaSansFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.sp,
@@ -503,7 +567,7 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "Start a new conversation or invite friends with your Nura key to begin messaging securely.",
+                                text = emptySubtitle,
                                 fontFamily = PlusJakartaSansFamily,
                                 fontWeight = FontWeight.Normal,
                                 fontSize = 14.sp,

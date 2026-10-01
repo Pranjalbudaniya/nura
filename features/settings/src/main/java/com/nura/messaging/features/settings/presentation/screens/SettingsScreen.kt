@@ -58,6 +58,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -75,8 +76,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nura.messaging.core.common.ui.theme.CustomAccent
 import com.nura.messaging.core.common.ui.theme.NuraTheme
 import com.nura.messaging.core.common.ui.theme.PlusJakartaSansFamily
+import com.nura.messaging.core.common.ui.theme.ThemeMode
+import com.nura.messaging.core.common.ui.theme.ThemePreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -103,10 +107,8 @@ fun SettingsScreen(
 
     var expandedCard by remember { mutableStateOf(SettingsCardType.NONE) }
 
-    // Appearance states
-    var selectedThemeMode by remember { mutableIntStateOf(0) } // 0: Dark (Nocturnal), 1: Light (Porcelain), 2: System
-    var selectedCustomAccentIndex by remember { mutableIntStateOf(0) } // 0: Terracotta, 1: Emerald, 2: Cobalt, 3: Amethyst
-    var highContrastMode by remember { mutableStateOf(false) }
+    // Live persistent theme state from ThemePreferencesManager
+    val themeConfig by ThemePreferencesManager.themeConfig.collectAsState()
 
     // Cache states
     var cacheSizeBytes by remember { mutableLongStateOf(0L) }
@@ -263,10 +265,10 @@ fun SettingsScreen(
                 ExpandableSettingsCard(
                     icon = Icons.Outlined.Palette,
                     title = "Appearance & Theme",
-                    subtitle = when (selectedThemeMode) {
-                        0 -> "Nocturnal Obsidian (Dark)"
-                        1 -> "Porcelain Cream (Light)"
-                        else -> "System Synchronized"
+                    subtitle = when (themeConfig.themeMode) {
+                        ThemeMode.DARK -> "Nocturnal Obsidian (Dark)"
+                        ThemeMode.LIGHT -> "Porcelain Cream (Light)"
+                        ThemeMode.SYSTEM -> "System Synchronized"
                     },
                     isExpanded = expandedCard == SettingsCardType.APPEARANCE,
                     onToggle = { toggleCard(SettingsCardType.APPEARANCE) }
@@ -289,20 +291,20 @@ fun SettingsScreen(
                             ThemeModeOptionRow(
                                 title = "Nocturnal Obsidian (Dark Mode)",
                                 description = "Deep yakisugi dark canvas tailored for low-light intimacy",
-                                isSelected = selectedThemeMode == 0,
-                                onSelect = { selectedThemeMode = 0 }
+                                isSelected = themeConfig.themeMode == ThemeMode.DARK,
+                                onSelect = { ThemePreferencesManager.setThemeMode(context, ThemeMode.DARK) }
                             )
                             ThemeModeOptionRow(
                                 title = "Porcelain Cream (Light Mode)",
                                 description = "High-legibility warm architectural parchment surface",
-                                isSelected = selectedThemeMode == 1,
-                                onSelect = { selectedThemeMode = 1 }
+                                isSelected = themeConfig.themeMode == ThemeMode.LIGHT,
+                                onSelect = { ThemePreferencesManager.setThemeMode(context, ThemeMode.LIGHT) }
                             )
                             ThemeModeOptionRow(
                                 title = "System Synchronized",
                                 description = "Automatically conforms to your device light/dark schedule",
-                                isSelected = selectedThemeMode == 2,
-                                onSelect = { selectedThemeMode = 2 }
+                                isSelected = themeConfig.themeMode == ThemeMode.SYSTEM,
+                                onSelect = { ThemePreferencesManager.setThemeMode(context, ThemeMode.SYSTEM) }
                             )
                         }
 
@@ -319,19 +321,20 @@ fun SettingsScreen(
                                 color = colors.subtitleText
                             )
 
-                            val accentSwatches = listOf(
-                                "Radiant Terracotta" to colors.terracottaAccent,
-                                "Alpine Emerald" to colors.strengthStrong,
-                                "Nordic Cobalt" to colorScheme.secondary,
-                                "Royal Amethyst" to colorScheme.tertiary
+                            val accentList = listOf(
+                                CustomAccent.TERRACOTTA,
+                                CustomAccent.EMERALD,
+                                CustomAccent.COBALT,
+                                CustomAccent.AMETHYST
                             )
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                accentSwatches.forEachIndexed { index, (label, swatchColor) ->
-                                    val isSelected = selectedCustomAccentIndex == index
+                                accentList.forEach { accent ->
+                                    val isSelected = themeConfig.accent == accent
+                                    val swatchColor = accent.darkColor
                                     Column(
                                         modifier = Modifier
                                             .weight(1f)
@@ -342,7 +345,7 @@ fun SettingsScreen(
                                                 color = if (isSelected) colors.terracottaAccent else colors.badgeBorder,
                                                 shape = RoundedCornerShape(12.dp)
                                             )
-                                            .clickable { selectedCustomAccentIndex = index }
+                                            .clickable { ThemePreferencesManager.setCustomAccent(context, accent) }
                                             .padding(vertical = 12.dp, horizontal = 6.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -364,7 +367,7 @@ fun SettingsScreen(
                                             }
                                         }
                                         Text(
-                                            text = label.split(" ").last(),
+                                            text = accent.displayName.split(" ").last(),
                                             fontFamily = PlusJakartaSansFamily,
                                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                                             fontSize = 11.sp,
@@ -400,8 +403,8 @@ fun SettingsScreen(
                                 )
                             }
                             Switch(
-                                checked = highContrastMode,
-                                onCheckedChange = { highContrastMode = it },
+                                checked = themeConfig.isHighContrast,
+                                onCheckedChange = { ThemePreferencesManager.setHighContrast(context, it) },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
                                     checkedTrackColor = colors.terracottaAccent,

@@ -184,5 +184,8 @@ class AuthUseCasesTest {
         override fun observeAuthState(): Flow<AuthUser?> = flowOf(null)
 
         override suspend fun handleDeepLink(uriString: String): Boolean = deepLinkResult
+
+        override suspend fun updateProfile(name: String, about: String): Result<AuthUser> =
+            Result.success(AuthUser("id_1", "test@nura.chat", name, about = about))
     }
 }

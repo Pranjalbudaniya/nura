@@ -173,4 +173,59 @@ class SupabaseAuthDataSource @Inject constructor(
             false
         }
     }
+
+    suspend fun updateProfile(userId: String, name: String, about: String): UserInfo? {
+        val token = auth.currentAccessTokenOrNull()
+
+        // 1. Update Supabase Auth user metadata
+        if (token != null) {
+            try {
+                val authUrl = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/auth/v1/user"
+                val authJson = buildJsonObject {
+                    put("data", buildJsonObject {
+                        put("full_name", name)
+                        put("display_name", name)
+                        put("about", about)
+                    })
+                }.toString()
+
+                val authRequest = Request.Builder()
+                    .url(authUrl)
+                    .header("apikey", SupabaseConfig.DEFAULT_ANON_KEY)
+                    .header("Authorization", "Bearer $token")
+                    .header("Content-Type", "application/json")
+                    .put(authJson.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                withContext(Dispatchers.IO) {
+                    okHttpClient.newCall(authRequest).execute().close()
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. Update Supabase PostgREST public.profiles table
+        try {
+            val url = "${SupabaseConfig.DEFAULT_SUPABASE_URL}/rest/v1/profiles?id=eq.$userId"
+            val json = buildJsonObject {
+                put("full_name", name)
+                put("display_name", name)
+                put("about", about)
+            }.toString()
+
+            val request = Request.Builder()
+                .url(url)
+                .header("apikey", SupabaseConfig.DEFAULT_ANON_KEY)
+                .header("Authorization", "Bearer ${token ?: SupabaseConfig.DEFAULT_ANON_KEY}")
+                .header("Prefer", "return=minimal")
+                .header("Content-Type", "application/json")
+                .patch(json.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            withContext(Dispatchers.IO) {
+                okHttpClient.newCall(request).execute().close()
+            }
+        } catch (_: Exception) {}
+
+        return auth.currentUserOrNull()
+    }
 }
